@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useHighScore } from '@/hooks/useHighScore';
 import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 const GRID_SIZE = 4;
 const WINNING_TILE = 2048;
@@ -124,7 +124,6 @@ const Game2048 = () => {
     }
 
     if (moved) {
-      // Play sound based on action
       if (merged) {
         playSound('merge');
       } else {
@@ -137,7 +136,6 @@ const Game2048 = () => {
       setScore(newScore);
       updateHighScore(newScore);
 
-      // Check game over
       const hasEmptyCell = finalBoard.some(row => row.some(cell => cell === null));
       if (!hasEmptyCell) {
         let canMove = false;
@@ -163,7 +161,6 @@ const Game2048 = () => {
     }
   }, [board, gameOver, score, addRandomTile, playSound, updateHighScore]);
 
-  // Check for win
   useEffect(() => {
     if (won) {
       playSound('win');
@@ -225,32 +222,16 @@ const Game2048 = () => {
         <meta name="description" content="Combine tiles to reach 2048 in this addictive puzzle game!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={toggleMute}
-                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                  title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-                <div className="flex items-center gap-2 text-primary">
-                  <Trophy className="h-5 w-5" />
-                  <span className="font-bold">{highScore}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
+      <GameLayout
+        gameId="2048"
+        title="2048"
+        score={score}
+        highScore={highScore}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col items-center justify-center p-4 min-h-[450px]">
           <div className="text-center mb-6">
             <h1 className="text-4xl font-bold gradient-text mb-2">2048</h1>
             <p className="text-xl text-muted-foreground">Score: <span className="text-primary font-bold">{score}</span></p>
@@ -292,8 +273,8 @@ const Game2048 = () => {
           </button>
 
           <p className="text-muted-foreground text-sm mt-4">Use Arrow Keys or WASD to play</p>
-        </main>
-      </div>
+        </div>
+      </GameLayout>
     </>
   );
 };

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 20;
@@ -16,11 +18,13 @@ const SnakeGame = () => {
   const [direction, setDirection] = useState<Direction>('RIGHT');
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const gameLoopRef = useRef<number>();
   const directionRef = useRef<Direction>('RIGHT');
+
+  const { highScore, updateHighScore } = useHighScore('snake-game');
+  const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const generateFood = useCallback((): Position => {
     let newFood: Position;
@@ -42,7 +46,8 @@ const SnakeGame = () => {
     setScore(0);
     setIsPaused(false);
     setGameStarted(true);
-  }, []);
+    playSound('click');
+  }, [playSound]);
 
   const moveSnake = useCallback(() => {
     if (gameOver || isPaused || !gameStarted) return;
@@ -58,33 +63,37 @@ const SnakeGame = () => {
         case 'RIGHT': head.x += 1; break;
       }
 
-      // Check wall collision
       if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
         setGameOver(true);
-        setHighScore(prev => Math.max(prev, score));
+        updateHighScore(score);
+        playSound('gameOver');
         return prevSnake;
       }
 
-      // Check self collision
       if (prevSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
         setGameOver(true);
-        setHighScore(prev => Math.max(prev, score));
+        updateHighScore(score);
+        playSound('gameOver');
         return prevSnake;
       }
 
       const newSnake = [head, ...prevSnake];
 
-      // Check food collision
       if (head.x === food.x && head.y === food.y) {
-        setScore(prev => prev + 10);
+        setScore(prev => {
+          const newScore = prev + 10;
+          updateHighScore(newScore);
+          return newScore;
+        });
         setFood(generateFood());
+        playSound('success');
       } else {
         newSnake.pop();
       }
 
       return newSnake;
     });
-  }, [food, gameOver, isPaused, gameStarted, score, generateFood]);
+  }, [food, gameOver, isPaused, gameStarted, score, generateFood, updateHighScore, playSound]);
 
   useEffect(() => {
     if (gameStarted && !gameOver && !isPaused) {
@@ -169,25 +178,16 @@ const SnakeGame = () => {
         <meta name="description" content="Play the classic Snake game for free. Eat food, grow longer, and try to beat your high score!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-primary">
-                  <Trophy className="h-5 w-5" />
-                  <span className="font-bold">{highScore}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
+      <GameLayout
+        gameId="snake-game"
+        title="Snake Classic"
+        score={score}
+        highScore={highScore}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col items-center justify-center p-4 min-h-[500px]">
           <div className="text-center mb-4">
             <h1 className="text-3xl font-bold gradient-text mb-2">Snake Game</h1>
             <p className="text-muted-foreground">Score: <span className="text-primary font-bold">{score}</span></p>
@@ -197,7 +197,6 @@ const SnakeGame = () => {
             className="relative bg-card rounded-xl border-2 border-border overflow-hidden"
             style={{ width: GRID_SIZE * CELL_SIZE, height: GRID_SIZE * CELL_SIZE }}
           >
-            {/* Grid background */}
             <div className="absolute inset-0 opacity-10">
               {Array.from({ length: GRID_SIZE }).map((_, y) => (
                 <div key={y} className="flex">
@@ -208,7 +207,6 @@ const SnakeGame = () => {
               ))}
             </div>
 
-            {/* Snake */}
             {snake.map((segment, index) => (
               <div
                 key={index}
@@ -223,7 +221,6 @@ const SnakeGame = () => {
               />
             ))}
 
-            {/* Food */}
             <div
               className="absolute bg-accent rounded-full animate-pulse"
               style={{
@@ -234,7 +231,6 @@ const SnakeGame = () => {
               }}
             />
 
-            {/* Game Over / Start overlay */}
             {(gameOver || !gameStarted) && (
               <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center backdrop-blur-sm">
                 <h2 className="text-2xl font-bold mb-4">{gameOver ? 'Game Over!' : 'Snake Game'}</h2>
@@ -250,7 +246,6 @@ const SnakeGame = () => {
               </div>
             )}
 
-            {/* Pause overlay */}
             {isPaused && !gameOver && (
               <div className="absolute inset-0 bg-background/80 flex items-center justify-center backdrop-blur-sm">
                 <h2 className="text-2xl font-bold">Paused</h2>
@@ -258,7 +253,6 @@ const SnakeGame = () => {
             )}
           </div>
 
-          {/* Touch controls for mobile */}
           <div className="mt-6 grid grid-cols-3 gap-2 md:hidden">
             <div />
             <button onClick={() => handleTouchControl('UP')} className="p-4 bg-card rounded-lg border border-border active:bg-primary/20">↑</button>
@@ -269,8 +263,8 @@ const SnakeGame = () => {
           </div>
 
           <p className="text-muted-foreground text-sm mt-4">Press Space to pause</p>
-        </main>
-      </div>
+        </div>
+      </GameLayout>
     </>
   );
 };

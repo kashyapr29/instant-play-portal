@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 type Player = 'X' | 'O' | null;
 type Board = Player[];
@@ -13,12 +14,13 @@ const TicTacToe = () => {
   const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
 
   const { highScore: totalWins, updateHighScore } = useHighScore('tic-tac-toe');
+  const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const calculateWinner = (squares: Board): { winner: Player; line: number[] } | null => {
     const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // cols
-      [0, 4, 8], [2, 4, 6], // diagonals
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6],
     ];
 
     for (const [a, b, c] of lines) {
@@ -37,6 +39,7 @@ const TicTacToe = () => {
   const handleClick = (index: number) => {
     if (board[index] || winner) return;
 
+    playSound('click');
     const newBoard = [...board];
     newBoard[index] = isXNext ? 'X' : 'O';
     setBoard(newBoard);
@@ -44,23 +47,23 @@ const TicTacToe = () => {
 
     const newResult = calculateWinner(newBoard);
     if (newResult?.winner) {
+      playSound('win');
       setScores(prev => {
         const newScores = {
           ...prev,
           [newResult.winner!]: prev[newResult.winner!] + 1,
         };
-        // Track total X wins as high score
         if (newResult.winner === 'X') {
           updateHighScore(newScores.X);
         }
         return newScores;
       });
     } else if (newBoard.every(square => square !== null)) {
+      playSound('fail');
       setScores(prev => ({ ...prev, draws: prev.draws + 1 }));
     }
   };
 
-  // Load saved scores on mount
   useEffect(() => {
     const savedScores = localStorage.getItem('tictactoe_scores');
     if (savedScores) {
@@ -68,7 +71,6 @@ const TicTacToe = () => {
     }
   }, []);
 
-  // Save scores when they change
   useEffect(() => {
     localStorage.setItem('tictactoe_scores', JSON.stringify(scores));
   }, [scores]);
@@ -76,6 +78,7 @@ const TicTacToe = () => {
   const resetGame = () => {
     setBoard(Array(9).fill(null));
     setIsXNext(true);
+    playSound('click');
   };
 
   const resetScores = () => {
@@ -97,27 +100,18 @@ const TicTacToe = () => {
         <meta name="description" content="Play classic Tic Tac Toe for free. Challenge a friend in this timeless strategy game!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-2 text-primary">
-                <Trophy className="h-5 w-5" />
-                <span className="font-bold">{totalWins} X wins</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
+      <GameLayout
+        gameId="tic-tac-toe"
+        title="Tic Tac Toe"
+        highScore={totalWins}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col items-center justify-center p-6 min-h-[400px]">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold gradient-text mb-4">Tic Tac Toe</h1>
             
-            {/* Scoreboard */}
             <div className="flex items-center justify-center gap-6 mb-4">
               <div className="text-center">
                 <p className="text-2xl font-bold text-primary">X</p>
@@ -138,7 +132,6 @@ const TicTacToe = () => {
             </p>
           </div>
 
-          {/* Game Board */}
           <div className="grid grid-cols-3 gap-2 mb-6">
             {board.map((square, index) => (
               <button
@@ -176,8 +169,8 @@ const TicTacToe = () => {
               Reset Scores
             </button>
           </div>
-        </main>
-      </div>
+        </div>
+      </GameLayout>
     </>
   );
 };
