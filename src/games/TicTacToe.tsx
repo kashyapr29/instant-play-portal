@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
 
 type Player = 'X' | 'O' | null;
 type Board = Player[];
@@ -10,6 +11,8 @@ const TicTacToe = () => {
   const [board, setBoard] = useState<Board>(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
   const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
+
+  const { highScore: totalWins, updateHighScore } = useHighScore('tic-tac-toe');
 
   const calculateWinner = (squares: Board): { winner: Player; line: number[] } | null => {
     const lines = [
@@ -41,14 +44,34 @@ const TicTacToe = () => {
 
     const newResult = calculateWinner(newBoard);
     if (newResult?.winner) {
-      setScores(prev => ({
-        ...prev,
-        [newResult.winner!]: prev[newResult.winner!] + 1,
-      }));
+      setScores(prev => {
+        const newScores = {
+          ...prev,
+          [newResult.winner!]: prev[newResult.winner!] + 1,
+        };
+        // Track total X wins as high score
+        if (newResult.winner === 'X') {
+          updateHighScore(newScores.X);
+        }
+        return newScores;
+      });
     } else if (newBoard.every(square => square !== null)) {
       setScores(prev => ({ ...prev, draws: prev.draws + 1 }));
     }
   };
+
+  // Load saved scores on mount
+  useEffect(() => {
+    const savedScores = localStorage.getItem('tictactoe_scores');
+    if (savedScores) {
+      setScores(JSON.parse(savedScores));
+    }
+  }, []);
+
+  // Save scores when they change
+  useEffect(() => {
+    localStorage.setItem('tictactoe_scores', JSON.stringify(scores));
+  }, [scores]);
 
   const resetGame = () => {
     setBoard(Array(9).fill(null));
@@ -58,6 +81,7 @@ const TicTacToe = () => {
   const resetScores = () => {
     resetGame();
     setScores({ X: 0, O: 0, draws: 0 });
+    localStorage.removeItem('tictactoe_scores');
   };
 
   const getStatus = () => {
@@ -81,6 +105,10 @@ const TicTacToe = () => {
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back to Games</span>
               </Link>
+              <div className="flex items-center gap-2 text-primary">
+                <Trophy className="h-5 w-5" />
+                <span className="font-bold">{totalWins} X wins</span>
+              </div>
             </div>
           </div>
         </header>

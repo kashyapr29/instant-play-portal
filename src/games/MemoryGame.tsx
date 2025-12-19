@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
 
 const CARD_EMOJIS = ['🎮', '🎲', '🎯', '🏆', '⭐', '🚀', '💎', '🔥'];
 
@@ -18,8 +20,13 @@ const MemoryGame = () => {
   const [moves, setMoves] = useState(0);
   const [matches, setMatches] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
-  const [bestScore, setBestScore] = useState<number | null>(null);
   const [gameComplete, setGameComplete] = useState(false);
+
+  // For memory game, lower score is better, so we track "best moves" differently
+  // We'll store as negative to use the same hook (higher = better internally)
+  const { highScore: storedBest, updateHighScore } = useHighScore('memory-match');
+  const bestScore = storedBest > 0 ? 1000 - storedBest : null; // Convert back
+  const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const initializeGame = () => {
     const shuffledCards: Card[] = [...CARD_EMOJIS, ...CARD_EMOJIS]
@@ -35,6 +42,7 @@ const MemoryGame = () => {
     setMoves(0);
     setMatches(0);
     setGameComplete(false);
+    playSound('click');
   };
 
   useEffect(() => {
@@ -44,17 +52,20 @@ const MemoryGame = () => {
   useEffect(() => {
     if (matches === CARD_EMOJIS.length) {
       setGameComplete(true);
-      if (!bestScore || moves < bestScore) {
-        setBestScore(moves);
-      }
+      playSound('win');
+      // For memory, lower moves = better, so we store 1000 - moves to fit the "higher is better" pattern
+      const scoreValue = 1000 - moves;
+      updateHighScore(scoreValue);
     }
-  }, [matches, moves, bestScore]);
+  }, [matches, moves, playSound, updateHighScore]);
 
   const handleCardClick = (cardId: number) => {
     if (isChecking) return;
     if (flippedCards.length === 2) return;
     if (cards[cardId].isMatched) return;
     if (flippedCards.includes(cardId)) return;
+
+    playSound('flip');
 
     const newFlippedCards = [...flippedCards, cardId];
     setFlippedCards(newFlippedCards);
@@ -75,6 +86,7 @@ const MemoryGame = () => {
 
       if (firstCard.emoji === secondCard.emoji) {
         setTimeout(() => {
+          playSound('match');
           setCards(prev =>
             prev.map(card =>
               card.id === firstId || card.id === secondId
@@ -88,6 +100,7 @@ const MemoryGame = () => {
         }, 500);
       } else {
         setTimeout(() => {
+          playSound('fail');
           setCards(prev =>
             prev.map(card =>
               card.id === firstId || card.id === secondId
@@ -118,6 +131,13 @@ const MemoryGame = () => {
                 <span>Back to Games</span>
               </Link>
               <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
                 {bestScore && (
                   <div className="flex items-center gap-2 text-primary">
                     <Trophy className="h-5 w-5" />

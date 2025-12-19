@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
 
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 320;
@@ -36,21 +38,25 @@ const BreakoutGame = () => {
   const [ball, setBall] = useState<Ball>({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT - 50, dx: 4, dy: -4 });
   const [bricks, setBricks] = useState<Brick[]>([]);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [gameOver, setGameOver] = useState(false);
   const [gameWon, setGameWon] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
 
+  const { highScore, updateHighScore } = useHighScore('breakout');
+  const { playSound, isMuted, toggleMute } = useGameAudio();
+
   const ballRef = useRef(ball);
   const paddleRef = useRef(paddleX);
   const bricksRef = useRef(bricks);
   const gameOverRef = useRef(gameOver);
+  const scoreRef = useRef(score);
 
   useEffect(() => { ballRef.current = ball; }, [ball]);
   useEffect(() => { paddleRef.current = paddleX; }, [paddleX]);
   useEffect(() => { bricksRef.current = bricks; }, [bricks]);
   useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => { scoreRef.current = score; }, [score]);
 
   const initBricks = useCallback(() => {
     const newBricks: Brick[] = [];
@@ -78,7 +84,8 @@ const BreakoutGame = () => {
     setGameOver(false);
     setGameWon(false);
     setGameStarted(true);
-  }, [initBricks]);
+    playSound('click');
+  }, [initBricks, playSound]);
 
   useEffect(() => {
     setBricks(initBricks());
@@ -118,15 +125,22 @@ const BreakoutGame = () => {
         let newY = prevBall.y + prevBall.dy;
         let newDx = prevBall.dx;
         let newDy = prevBall.dy;
+        let playBounce = false;
 
         // Wall collisions
         if (newX <= BALL_SIZE / 2 || newX >= CANVAS_WIDTH - BALL_SIZE / 2) {
           newDx = -newDx;
           newX = Math.max(BALL_SIZE / 2, Math.min(CANVAS_WIDTH - BALL_SIZE / 2, newX));
+          playBounce = true;
         }
         if (newY <= BALL_SIZE / 2) {
           newDy = -newDy;
           newY = BALL_SIZE / 2;
+          playBounce = true;
+        }
+
+        if (playBounce) {
+          playSound('bounce');
         }
 
         // Paddle collision
@@ -140,6 +154,7 @@ const BreakoutGame = () => {
           newDy = -Math.abs(newDy);
           const hitPos = (newX - paddle) / PADDLE_WIDTH;
           newDx = (hitPos - 0.5) * 8;
+          playSound('bounce');
         }
 
         // Ball falls below
@@ -148,7 +163,10 @@ const BreakoutGame = () => {
             const newLives = prev - 1;
             if (newLives <= 0) {
               setGameOver(true);
-              setHighScore(hs => Math.max(hs, score));
+              updateHighScore(scoreRef.current);
+              playSound('gameOver');
+            } else {
+              playSound('lose');
             }
             return newLives;
           });
@@ -167,7 +185,11 @@ const BreakoutGame = () => {
               newY <= brick.y + BRICK_HEIGHT
             ) {
               hitBrick = true;
-              setScore(s => s + 10);
+              setScore(s => {
+                const newScore = s + 10;
+                updateHighScore(newScore);
+                return newScore;
+              });
               return { ...brick, visible: false };
             }
             return brick;
@@ -175,12 +197,14 @@ const BreakoutGame = () => {
 
           if (hitBrick) {
             newDy = -newDy;
+            playSound('break');
           }
 
           // Check win
           if (newBricks.every(b => !b.visible)) {
             setGameWon(true);
-            setHighScore(hs => Math.max(hs, score + 10));
+            updateHighScore(scoreRef.current + 10);
+            playSound('win');
           }
 
           return newBricks;
@@ -191,7 +215,7 @@ const BreakoutGame = () => {
     }, 16);
 
     return () => clearInterval(gameLoop);
-  }, [gameStarted, gameOver, gameWon, score]);
+  }, [gameStarted, gameOver, gameWon, playSound, updateHighScore]);
 
   // Render
   useEffect(() => {
@@ -241,6 +265,13 @@ const BreakoutGame = () => {
                 <span>Back to Games</span>
               </Link>
               <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
                 <div className="flex items-center gap-2 text-primary">
                   <Trophy className="h-5 w-5" />
                   <span className="font-bold">{highScore}</span>

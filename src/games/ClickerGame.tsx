@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Star, Sparkles } from 'lucide-react';
+import { ArrowLeft, Zap, Star, Sparkles, Trophy } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
 
 interface Upgrade {
   id: string;
@@ -22,6 +23,8 @@ const ClickerGame = () => {
   const [autoClickPower, setAutoClickPower] = useState(0);
   const [clickAnimations, setClickAnimations] = useState<{ id: number; x: number; y: number }[]>([]);
 
+  const { highScore, updateHighScore } = useHighScore('click-quest');
+
   const [upgrades, setUpgrades] = useState<Upgrade[]>([
     { id: 'power1', name: 'Better Clicks', description: '+1 per click', baseCost: 10, costMultiplier: 1.5, effect: 1, type: 'click', owned: 0, icon: <Zap className="h-5 w-5" /> },
     { id: 'power2', name: 'Super Clicks', description: '+5 per click', baseCost: 100, costMultiplier: 1.8, effect: 5, type: 'click', owned: 0, icon: <Star className="h-5 w-5" /> },
@@ -34,7 +37,11 @@ const ClickerGame = () => {
   };
 
   const handleClick = useCallback((e: React.MouseEvent) => {
-    setPoints(prev => prev + clickPower);
+    setPoints(prev => {
+      const newPoints = prev + clickPower;
+      updateHighScore(newPoints);
+      return newPoints;
+    });
     setTotalClicks(prev => prev + 1);
 
     const rect = e.currentTarget.getBoundingClientRect();
@@ -46,7 +53,7 @@ const ClickerGame = () => {
     setTimeout(() => {
       setClickAnimations(prev => prev.filter(anim => anim.id !== id));
     }, 1000);
-  }, [clickPower]);
+  }, [clickPower, updateHighScore]);
 
   const buyUpgrade = (upgradeId: string) => {
     setUpgrades(prev => {
@@ -73,11 +80,15 @@ const ClickerGame = () => {
   useEffect(() => {
     if (autoClickPower > 0) {
       const interval = setInterval(() => {
-        setPoints(prev => prev + autoClickPower);
+        setPoints(prev => {
+          const newPoints = prev + autoClickPower;
+          updateHighScore(newPoints);
+          return newPoints;
+        });
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [autoClickPower]);
+  }, [autoClickPower, updateHighScore]);
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -100,8 +111,14 @@ const ClickerGame = () => {
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back to Games</span>
               </Link>
-              <div className="text-muted-foreground text-sm">
-                Total Clicks: {formatNumber(totalClicks)}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-primary">
+                  <Trophy className="h-5 w-5" />
+                  <span className="font-bold">{formatNumber(highScore)}</span>
+                </div>
+                <div className="text-muted-foreground text-sm">
+                  Total Clicks: {formatNumber(totalClicks)}
+                </div>
               </div>
             </div>
           </div>
