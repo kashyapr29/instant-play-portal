@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
 
 const GRID_SIZE = 4;
 const WINNING_TILE = 2048;
@@ -11,9 +13,11 @@ type Board = (number | null)[][];
 const Game2048 = () => {
   const [board, setBoard] = useState<Board>([]);
   const [score, setScore] = useState(0);
-  const [bestScore, setBestScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
+  
+  const { highScore, updateHighScore } = useHighScore('2048');
+  const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const createEmptyBoard = (): Board => {
     return Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
@@ -45,20 +49,23 @@ const Game2048 = () => {
     setScore(0);
     setGameOver(false);
     setWon(false);
-  }, [addRandomTile]);
+    playSound('click');
+  }, [addRandomTile, playSound]);
 
   useEffect(() => {
     initializeGame();
-  }, [initializeGame]);
+  }, []);
 
-  const slideRow = (row: (number | null)[]): { newRow: (number | null)[]; points: number } => {
+  const slideRow = (row: (number | null)[]): { newRow: (number | null)[]; points: number; merged: boolean } => {
     const filtered = row.filter((cell): cell is number => cell !== null);
     let points = 0;
+    let merged = false;
     
     for (let i = 0; i < filtered.length - 1; i++) {
       if (filtered[i] === filtered[i + 1]) {
         filtered[i] *= 2;
         points += filtered[i];
+        merged = true;
         if (filtered[i] === WINNING_TILE) setWon(true);
         filtered.splice(i + 1, 1);
       }
@@ -68,21 +75,23 @@ const Game2048 = () => {
       filtered.push(null);
     }
 
-    return { newRow: filtered, points };
+    return { newRow: filtered, points, merged };
   };
 
-  const moveLeft = (currentBoard: Board): { newBoard: Board; points: number; moved: boolean } => {
+  const moveLeft = (currentBoard: Board): { newBoard: Board; points: number; moved: boolean; merged: boolean } => {
     let totalPoints = 0;
     let moved = false;
+    let anyMerged = false;
     
     const newBoard = currentBoard.map(row => {
-      const { newRow, points } = slideRow([...row]);
+      const { newRow, points, merged } = slideRow([...row]);
       totalPoints += points;
+      if (merged) anyMerged = true;
       if (JSON.stringify(row) !== JSON.stringify(newRow)) moved = true;
       return newRow;
     });
 
-    return { newBoard, points: totalPoints, moved };
+    return { newBoard, points: totalPoints, moved, merged: anyMerged };
   };
 
   const rotateBoard = (currentBoard: Board): Board => {
@@ -107,7 +116,7 @@ const Game2048 = () => {
       currentBoard = rotateBoard(currentBoard);
     }
 
-    const { newBoard: movedBoard, points, moved } = moveLeft(currentBoard);
+    const { newBoard: movedBoard, points, moved, merged } = moveLeft(currentBoard);
 
     let finalBoard = movedBoard;
     for (let i = 0; i < (4 - rotations) % 4; i++) {
@@ -115,11 +124,18 @@ const Game2048 = () => {
     }
 
     if (moved) {
+      // Play sound based on action
+      if (merged) {
+        playSound('merge');
+      } else {
+        playSound('move');
+      }
+      
       finalBoard = addRandomTile(finalBoard);
       setBoard(finalBoard);
       const newScore = score + points;
       setScore(newScore);
-      setBestScore(prev => Math.max(prev, newScore));
+      updateHighScore(newScore);
 
       // Check game over
       const hasEmptyCell = finalBoard.some(row => row.some(cell => cell === null));
@@ -138,10 +154,22 @@ const Game2048 = () => {
           }
           if (canMove) break;
         }
-        if (!canMove) setGameOver(true);
+        if (!canMove) {
+          setGameOver(true);
+          playSound('gameOver');
+          updateHighScore(newScore);
+        }
       }
     }
-  }, [board, gameOver, score, addRandomTile]);
+  }, [board, gameOver, score, addRandomTile, playSound, updateHighScore]);
+
+  // Check for win
+  useEffect(() => {
+    if (won) {
+      playSound('win');
+      updateHighScore(score);
+    }
+  }, [won, playSound, score, updateHighScore]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -205,9 +233,18 @@ const Game2048 = () => {
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back to Games</span>
               </Link>
-              <div className="flex items-center gap-4 text-primary">
-                <Trophy className="h-5 w-5" />
-                <span className="font-bold">{bestScore}</span>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
+                <div className="flex items-center gap-2 text-primary">
+                  <Trophy className="h-5 w-5" />
+                  <span className="font-bold">{highScore}</span>
+                </div>
               </div>
             </div>
           </div>
