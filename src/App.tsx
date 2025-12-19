@@ -13,6 +13,14 @@ import About from "./pages/About";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 
+// Playable Games
+import SnakeGame from "./games/SnakeGame";
+import MemoryGame from "./games/MemoryGame";
+import TicTacToe from "./games/TicTacToe";
+import ClickerGame from "./games/ClickerGame";
+import BreakoutGame from "./games/BreakoutGame";
+import Game2048 from "./games/Game2048";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -25,6 +33,20 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/play/:gameId" element={<PlayGame />} />
+            
+            {/* Playable Games */}
+            <Route path="/game/snake" element={<SnakeGame />} />
+            <Route path="/game/snake-game" element={<SnakeGame />} />
+            <Route path="/game/memory" element={<MemoryGame />} />
+            <Route path="/game/memory-match" element={<MemoryGame />} />
+            <Route path="/game/tictactoe" element={<TicTacToe />} />
+            <Route path="/game/tic-tac-toe" element={<TicTacToe />} />
+            <Route path="/game/clicker" element={<ClickerGame />} />
+            <Route path="/game/click-quest" element={<ClickerGame />} />
+            <Route path="/game/breakout" element={<BreakoutGame />} />
+            <Route path="/game/2048" element={<Game2048 />} />
+            
+            {/* Info Pages */}
             <Route path="/developers" element={<Developers />} />
             <Route path="/affiliates" element={<Affiliates />} />
             <Route path="/contact" element={<Contact />} />
