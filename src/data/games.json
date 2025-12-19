@@ -1,12 +1,73 @@
 [
   {
+    "id": "snake-game",
+    "title": "Snake Classic",
+    "thumbnail": "/images/snake-game.png",
+    "gameUrl": "/game/snake",
+    "category": "Arcade",
+    "featured": true,
+    "description": "Classic snake game! Eat food, grow longer, avoid walls. How long can you survive?",
+    "isPlayable": true
+  },
+  {
+    "id": "memory-match",
+    "title": "Memory Match",
+    "thumbnail": "/images/memory-match.png",
+    "gameUrl": "/game/memory",
+    "category": "Puzzle",
+    "featured": false,
+    "description": "Test your memory! Match all card pairs in the fewest moves possible.",
+    "isPlayable": true
+  },
+  {
+    "id": "tic-tac-toe",
+    "title": "Tic Tac Toe",
+    "thumbnail": "/images/tic-tac-toe.png",
+    "gameUrl": "/game/tictactoe",
+    "category": "Strategy",
+    "featured": false,
+    "description": "Classic X and O game. Play against a friend and dominate the board!",
+    "isPlayable": true
+  },
+  {
+    "id": "click-quest",
+    "title": "Click Quest",
+    "thumbnail": "/images/click-quest.png",
+    "gameUrl": "/game/clicker",
+    "category": "Idle",
+    "featured": true,
+    "description": "Click your way to glory! Buy upgrades and watch your points skyrocket.",
+    "isPlayable": true
+  },
+  {
+    "id": "breakout",
+    "title": "Breakout",
+    "thumbnail": "/images/breakout.png",
+    "gameUrl": "/game/breakout",
+    "category": "Arcade",
+    "featured": false,
+    "description": "Smash all the bricks with the bouncing ball. Classic arcade action!",
+    "isPlayable": true
+  },
+  {
+    "id": "2048",
+    "title": "2048",
+    "thumbnail": "/images/2048-game.png",
+    "gameUrl": "/game/2048",
+    "category": "Puzzle",
+    "featured": true,
+    "description": "Slide tiles and combine numbers to reach the legendary 2048 tile!",
+    "isPlayable": true
+  },
+  {
     "id": "strike-pinball",
     "title": "Strike The Pinball",
     "thumbnail": "/images/strike-pinball.png",
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/b1d0fbbd81e24a6e8a2cba93c4a8e6f3/index.html",
     "category": "Arcade",
-    "featured": true,
-    "description": "Classic pinball action with modern graphics. Hit the targets and score big!"
+    "featured": false,
+    "description": "Classic pinball action with modern graphics. Hit the targets and score big!",
+    "isPlayable": false
   },
   {
     "id": "fruit-ninja",
@@ -15,7 +76,8 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/ca46bc9aca134cd39b63e67279c6db7c/index.html",
     "category": "Action",
     "featured": false,
-    "description": "Slice and dice your way through flying fruits in this addictive action game."
+    "description": "Slice and dice your way through flying fruits in this addictive action game.",
+    "isPlayable": false
   },
   {
     "id": "bubble-shooter",
@@ -24,7 +86,8 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/0a2cde7e5e5049b4a1c8d5c5c5e5e5e5/index.html",
     "category": "Puzzle",
     "featured": false,
-    "description": "Match and pop colorful bubbles in this relaxing puzzle game."
+    "description": "Match and pop colorful bubbles in this relaxing puzzle game.",
+    "isPlayable": false
   },
   {
     "id": "racing-thunder",
@@ -32,8 +95,9 @@
     "thumbnail": "/images/racing-thunder.png",
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/racing-thunder/index.html",
     "category": "Racing",
-    "featured": true,
-    "description": "High-speed racing action on thrilling tracks around the world."
+    "featured": false,
+    "description": "High-speed racing action on thrilling tracks around the world.",
+    "isPlayable": false
   },
   {
     "id": "chess-master",
@@ -42,7 +106,8 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/chess-master/index.html",
     "category": "Strategy",
     "featured": false,
-    "description": "Test your strategic thinking against AI opponents of varying difficulty."
+    "description": "Test your strategic thinking against AI opponents of varying difficulty.",
+    "isPlayable": false
   },
   {
     "id": "space-invaders",
@@ -51,7 +116,8 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/space-invaders/index.html",
     "category": "Arcade",
     "featured": false,
-    "description": "Defend Earth from waves of alien invaders in this classic arcade remake."
+    "description": "Defend Earth from waves of alien invaders in this classic arcade remake.",
+    "isPlayable": false
   },
   {
     "id": "puzzle-quest",
@@ -60,7 +126,8 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/puzzle-quest/index.html",
     "category": "Puzzle",
     "featured": false,
-    "description": "Solve intricate puzzles and unlock new levels in this brain-teasing adventure."
+    "description": "Solve intricate puzzles and unlock new levels in this brain-teasing adventure.",
+    "isPlayable": false
   },
   {
     "id": "ninja-jump",
@@ -69,6 +136,7 @@
     "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/ninja-jump/index.html",
     "category": "Action",
     "featured": false,
-    "description": "Jump, dodge, and fight your way through enemy-filled levels."
+    "description": "Jump, dodge, and fight your way through enemy-filled levels.",
+    "isPlayable": false
   }
 ]

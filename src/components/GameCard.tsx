@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Play, Star } from 'lucide-react';
+import { Play, Star, Sparkles } from 'lucide-react';
 
 interface GameCardProps {
   id: string;
@@ -7,12 +7,17 @@ interface GameCardProps {
   thumbnail: string;
   category: string;
   featured?: boolean;
+  isPlayable?: boolean;
 }
 
-const GameCard = ({ id, title, thumbnail, category, featured }: GameCardProps) => {
+const GameCard = ({ id, title, thumbnail, category, featured, isPlayable }: GameCardProps) => {
+  // Determine if this is an internal playable game or external iframe
+  const isInternalGame = isPlayable === true;
+  const linkTo = isInternalGame ? `/game/${id.replace('-game', '').replace('-match', '').replace('-quest', '')}` : `/play/${id}`;
+
   return (
     <Link
-      to={`/play/${id}`}
+      to={linkTo}
       className="game-card group block"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-t-xl">
@@ -36,6 +41,14 @@ const GameCard = ({ id, title, thumbnail, category, featured }: GameCardProps) =
           <div className="absolute top-3 left-3 featured-badge flex items-center gap-1">
             <Star className="h-3 w-3" />
             <span>Featured</span>
+          </div>
+        )}
+
+        {/* Playable badge */}
+        {isPlayable && (
+          <div className="absolute top-3 left-3 bg-primary px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 text-primary-foreground">
+            <Sparkles className="h-3 w-3" />
+            <span>Playable</span>
           </div>
         )}
         

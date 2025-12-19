@@ -6,6 +6,7 @@ interface Game {
   thumbnail: string;
   category: string;
   featured?: boolean;
+  isPlayable?: boolean;
 }
 
 interface GameGridProps {
@@ -32,6 +33,7 @@ const GameGrid = ({ games, title }: GameGridProps) => {
               thumbnail={game.thumbnail}
               category={game.category}
               featured={game.featured}
+              isPlayable={game.isPlayable}
             />
           </div>
         ))}
