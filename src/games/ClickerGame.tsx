@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Star, Sparkles, Trophy } from 'lucide-react';
+import { Zap, Star, Sparkles } from 'lucide-react';
 import { useHighScore } from '@/hooks/useHighScore';
+import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 interface Upgrade {
   id: string;
@@ -24,6 +25,7 @@ const ClickerGame = () => {
   const [clickAnimations, setClickAnimations] = useState<{ id: number; x: number; y: number }[]>([]);
 
   const { highScore, updateHighScore } = useHighScore('click-quest');
+  const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const [upgrades, setUpgrades] = useState<Upgrade[]>([
     { id: 'power1', name: 'Better Clicks', description: '+1 per click', baseCost: 10, costMultiplier: 1.5, effect: 1, type: 'click', owned: 0, icon: <Zap className="h-5 w-5" /> },
@@ -37,6 +39,7 @@ const ClickerGame = () => {
   };
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    playSound('click');
     setPoints(prev => {
       const newPoints = prev + clickPower;
       updateHighScore(newPoints);
@@ -53,7 +56,7 @@ const ClickerGame = () => {
     setTimeout(() => {
       setClickAnimations(prev => prev.filter(anim => anim.id !== id));
     }, 1000);
-  }, [clickPower, updateHighScore]);
+  }, [clickPower, updateHighScore, playSound]);
 
   const buyUpgrade = (upgradeId: string) => {
     setUpgrades(prev => {
@@ -63,6 +66,7 @@ const ClickerGame = () => {
       const cost = getUpgradeCost(upgrade);
       if (points < cost) return prev;
 
+      playSound('powerup');
       setPoints(p => p - cost);
 
       if (upgrade.type === 'click') {
@@ -103,28 +107,16 @@ const ClickerGame = () => {
         <meta name="description" content="Click your way to victory in this addictive idle clicker game. Buy upgrades and watch your points grow!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-primary">
-                  <Trophy className="h-5 w-5" />
-                  <span className="font-bold">{formatNumber(highScore)}</span>
-                </div>
-                <div className="text-muted-foreground text-sm">
-                  Total Clicks: {formatNumber(totalClicks)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col md:flex-row gap-6 p-4 container mx-auto max-w-4xl">
+      <GameLayout
+        gameId="click-quest"
+        title="Click Quest"
+        score={points}
+        highScore={highScore}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col md:flex-row gap-6 p-4 min-h-[500px]">
           {/* Click Area */}
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="text-center mb-6">
@@ -161,11 +153,12 @@ const ClickerGame = () => {
             <div className="mt-6 text-center text-muted-foreground">
               <p>Click Power: <span className="text-primary font-bold">{clickPower}</span>/click</p>
               <p>Auto: <span className="text-primary font-bold">{autoClickPower}</span>/second</p>
+              <p className="mt-2 text-sm">Total Clicks: {formatNumber(totalClicks)}</p>
             </div>
           </div>
 
           {/* Upgrades */}
-          <div className="md:w-80 bg-card rounded-xl border border-border p-4">
+          <div className="md:w-72 bg-card/50 rounded-xl border border-border p-4">
             <h2 className="text-xl font-bold mb-4">Upgrades</h2>
             <div className="space-y-3">
               {upgrades.map(upgrade => {
@@ -205,7 +198,7 @@ const ClickerGame = () => {
               })}
             </div>
           </div>
-        </main>
+        </div>
 
         <style>{`
           @keyframes float-up {
@@ -213,7 +206,7 @@ const ClickerGame = () => {
             100% { opacity: 0; transform: translateY(-50px); }
           }
         `}</style>
-      </div>
+      </GameLayout>
     </>
   );
 };

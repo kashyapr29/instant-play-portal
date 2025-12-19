@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useHighScore } from '@/hooks/useHighScore';
 import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 320;
@@ -127,7 +127,6 @@ const BreakoutGame = () => {
         let newDy = prevBall.dy;
         let playBounce = false;
 
-        // Wall collisions
         if (newX <= BALL_SIZE / 2 || newX >= CANVAS_WIDTH - BALL_SIZE / 2) {
           newDx = -newDx;
           newX = Math.max(BALL_SIZE / 2, Math.min(CANVAS_WIDTH - BALL_SIZE / 2, newX));
@@ -143,7 +142,6 @@ const BreakoutGame = () => {
           playSound('bounce');
         }
 
-        // Paddle collision
         const paddle = paddleRef.current;
         if (
           newY >= CANVAS_HEIGHT - PADDLE_HEIGHT - BALL_SIZE / 2 - 10 &&
@@ -157,7 +155,6 @@ const BreakoutGame = () => {
           playSound('bounce');
         }
 
-        // Ball falls below
         if (newY > CANVAS_HEIGHT) {
           setLives(prev => {
             const newLives = prev - 1;
@@ -173,7 +170,6 @@ const BreakoutGame = () => {
           return { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT - 50, dx: 4, dy: -4 };
         }
 
-        // Brick collisions
         setBricks(prevBricks => {
           let hitBrick = false;
           const newBricks = prevBricks.map(brick => {
@@ -200,7 +196,6 @@ const BreakoutGame = () => {
             playSound('break');
           }
 
-          // Check win
           if (newBricks.every(b => !b.visible)) {
             setGameWon(true);
             updateHighScore(scoreRef.current + 10);
@@ -217,7 +212,6 @@ const BreakoutGame = () => {
     return () => clearInterval(gameLoop);
   }, [gameStarted, gameOver, gameWon, playSound, updateHighScore]);
 
-  // Render
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -227,7 +221,6 @@ const BreakoutGame = () => {
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw bricks
     bricks.forEach(brick => {
       if (brick.visible) {
         ctx.fillStyle = brick.color;
@@ -237,11 +230,9 @@ const BreakoutGame = () => {
       }
     });
 
-    // Draw paddle
     ctx.fillStyle = '#4fd1c5';
     ctx.fillRect(paddleX, CANVAS_HEIGHT - PADDLE_HEIGHT - 10, PADDLE_WIDTH, PADDLE_HEIGHT);
 
-    // Draw ball
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
@@ -256,32 +247,16 @@ const BreakoutGame = () => {
         <meta name="description" content="Break all the bricks in this classic arcade game. Control the paddle and keep the ball in play!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={toggleMute}
-                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                  title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-                <div className="flex items-center gap-2 text-primary">
-                  <Trophy className="h-5 w-5" />
-                  <span className="font-bold">{highScore}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
+      <GameLayout
+        gameId="breakout"
+        title="Breakout"
+        score={score}
+        highScore={highScore}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col items-center justify-center p-4 min-h-[450px]">
           <div className="text-center mb-4">
             <h1 className="text-3xl font-bold gradient-text mb-2">Breakout</h1>
             <div className="flex items-center justify-center gap-6">
@@ -315,8 +290,8 @@ const BreakoutGame = () => {
               </div>
             )}
           </div>
-        </main>
-      </div>
+        </div>
+      </GameLayout>
     </>
   );
 };

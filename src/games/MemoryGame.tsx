@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useHighScore } from '@/hooks/useHighScore';
 import { useGameAudio } from '@/hooks/useGameAudio';
+import GameLayout from '@/components/GameLayout';
 
 const CARD_EMOJIS = ['🎮', '🎲', '🎯', '🏆', '⭐', '🚀', '💎', '🔥'];
 
@@ -22,10 +22,8 @@ const MemoryGame = () => {
   const [isChecking, setIsChecking] = useState(false);
   const [gameComplete, setGameComplete] = useState(false);
 
-  // For memory game, lower score is better, so we track "best moves" differently
-  // We'll store as negative to use the same hook (higher = better internally)
   const { highScore: storedBest, updateHighScore } = useHighScore('memory-match');
-  const bestScore = storedBest > 0 ? 1000 - storedBest : null; // Convert back
+  const bestScore = storedBest > 0 ? 1000 - storedBest : null;
   const { playSound, isMuted, toggleMute } = useGameAudio();
 
   const initializeGame = () => {
@@ -53,7 +51,6 @@ const MemoryGame = () => {
     if (matches === CARD_EMOJIS.length) {
       setGameComplete(true);
       playSound('win');
-      // For memory, lower moves = better, so we store 1000 - moves to fit the "higher is better" pattern
       const scoreValue = 1000 - moves;
       updateHighScore(scoreValue);
     }
@@ -122,34 +119,16 @@ const MemoryGame = () => {
         <meta name="description" content="Test your memory with this fun card matching game. Find all pairs in the fewest moves!" />
       </Helmet>
 
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Games</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={toggleMute}
-                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                  title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-                {bestScore && (
-                  <div className="flex items-center gap-2 text-primary">
-                    <Trophy className="h-5 w-5" />
-                    <span className="font-bold">{bestScore} moves</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
+      <GameLayout
+        gameId="memory-match"
+        title="Memory Match"
+        score={moves}
+        highScore={bestScore || undefined}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        showAudioControl
+      >
+        <div className="flex flex-col items-center justify-center p-6 min-h-[400px]">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold gradient-text mb-2">Memory Match</h1>
             <div className="flex items-center justify-center gap-6 text-muted-foreground">
@@ -206,8 +185,8 @@ const MemoryGame = () => {
               </div>
             </div>
           )}
-        </main>
-      </div>
+        </div>
+      </GameLayout>
     </>
   );
 };
