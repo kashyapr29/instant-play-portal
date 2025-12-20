@@ -339,25 +339,51 @@ const BreakoutProGame = () => {
           audioManager.wallHit();
         }
 
-        // Paddle collision
+        // Paddle collision - improved detection
         const paddleWidth = hasWidePaddle ? paddle.width * 1.5 : paddle.width;
         const paddleX = hasWidePaddle ? paddle.x - (paddleWidth - paddle.width) / 2 : paddle.x;
+        const paddleTop = paddle.y;
+        const paddleBottom = paddle.y + paddle.height;
         
-        if (
-          ball.y + ball.radius >= paddle.y &&
-          ball.y - ball.radius <= paddle.y + paddle.height &&
-          ball.x >= paddleX &&
-          ball.x <= paddleX + paddleWidth &&
-          ball.dy > 0
-        ) {
-          const hitPos = (ball.x - paddleX) / paddleWidth;
-          const angle = (hitPos - 0.5) * Math.PI * 0.7 - Math.PI / 2;
-          const speed = Math.hypot(ball.dx, ball.dy) * 1.01; // Slight speed increase
-          ball.dx = Math.sin(angle) * speed;
-          ball.dy = -Math.cos(angle) * speed;
-          ball.y = paddle.y - ball.radius;
-          audioManager.paddleHit();
-          setGameState(prev => ({ ...prev, combo: 0 }));
+        // Check if ball is moving downward and in paddle zone
+        if (ball.dy > 0) {
+          // Previous position check to prevent tunneling
+          const prevY = ball.y - ball.dy * speedMultiplier;
+          const ballBottom = ball.y + ball.radius;
+          const prevBallBottom = prevY + ball.radius;
+          
+          // Check if ball crossed paddle top between frames
+          const crossedPaddleTop = prevBallBottom <= paddleTop && ballBottom >= paddleTop;
+          const isWithinPaddle = ballBottom >= paddleTop && ball.y - ball.radius <= paddleBottom;
+          
+          if ((crossedPaddleTop || isWithinPaddle) && 
+              ball.x + ball.radius >= paddleX && 
+              ball.x - ball.radius <= paddleX + paddleWidth) {
+            
+            // Calculate hit position (0 = left edge, 1 = right edge)
+            const hitPos = Math.max(0, Math.min(1, (ball.x - paddleX) / paddleWidth));
+            
+            // Calculate bounce angle (-60 to +60 degrees from vertical)
+            const maxAngle = Math.PI / 3; // 60 degrees
+            const angle = (hitPos - 0.5) * 2 * maxAngle;
+            
+            // Maintain or slightly increase speed
+            const currentSpeed = Math.hypot(ball.dx, ball.dy);
+            const newSpeed = Math.min(currentSpeed * 1.02, 12); // Cap max speed
+            
+            // Apply new velocity
+            ball.dx = Math.sin(angle) * newSpeed;
+            ball.dy = -Math.abs(Math.cos(angle) * newSpeed); // Always go up
+            
+            // Ensure minimum upward velocity
+            if (ball.dy > -2) ball.dy = -2;
+            
+            // Reposition ball above paddle
+            ball.y = paddleTop - ball.radius - 1;
+            
+            audioManager.paddleHit();
+            setGameState(prev => ({ ...prev, combo: 0 }));
+          }
         }
 
         // Brick collisions
