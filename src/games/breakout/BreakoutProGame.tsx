@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Volume2, VolumeX, Pause, Play, Home, RotateCcw, Lock, Unlock, ChevronLeft, ChevronRight, Trophy, Star, Trash2 } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, Home, RotateCcw, Lock, Unlock, ChevronLeft, ChevronRight, Trophy, Star, Trash2, SkipForward } from 'lucide-react';
 import GameLayout from '@/components/GameLayout';
 import { Ball, Brick, Paddle, Particle, PowerUp, PowerUpType, GameScreen, GameState } from './types';
 import { LEVELS, getTotalLevels } from './levels';
@@ -618,6 +618,20 @@ const BreakoutProGame = () => {
     }
   };
 
+  const handleSkipLevel = () => {
+    const nextLevel = gameState.level + 1;
+    if (nextLevel <= getTotalLevels()) {
+      // Unlock the next level
+      unlockLevel(nextLevel);
+      setProgress(loadProgress());
+      audioManager.levelComplete();
+      startLevel(nextLevel);
+    } else {
+      // Already at last level, go to menu
+      setGameState(prev => ({ ...prev, screen: 'menu', score: 0 }));
+    }
+  };
+
   // Render screens
   const renderScreen = () => {
     switch (gameState.screen) {
@@ -752,6 +766,14 @@ const BreakoutProGame = () => {
               >
                 <Home className="h-5 w-5" />
                 Main Menu
+              </button>
+              
+              <button
+                onClick={handleSkipLevel}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-semibold hover:from-orange-400 hover:to-yellow-400 transition-all"
+              >
+                <SkipForward className="h-5 w-5" />
+                Skip Level
               </button>
             </div>
 
