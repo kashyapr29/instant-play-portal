@@ -386,20 +386,56 @@ const BreakoutProGame = () => {
           }
         }
 
-        // Brick collisions
+        // Brick collisions - improved to prevent ball getting stuck
+        let hasBouncedX = false;
+        let hasBouncedY = false;
+        const hitBricks: typeof bricksRef.current = [];
+        
         bricksRef.current.forEach(brick => {
           if (!brick.visible) return;
 
+          // Check collision
           if (
             ball.x + ball.radius > brick.x &&
             ball.x - ball.radius < brick.x + brick.width &&
             ball.y + ball.radius > brick.y &&
             ball.y - ball.radius < brick.y + brick.height
           ) {
-            handleBrickHit(brick, ballIndex);
+            hitBricks.push(brick);
+          }
+        });
 
-            if (!hasFireball) {
-              // Determine collision side
+        // Process hit bricks - only bounce once even if multiple bricks hit
+        hitBricks.forEach((brick, hitIndex) => {
+          handleBrickHit(brick, ballIndex);
+
+          // Only calculate bounce for first brick hit (prevents stuck ball)
+          if (!hasFireball && hitIndex === 0) {
+            // Calculate previous position
+            const prevX = ball.x - ball.dx * speedMultiplier;
+            const prevY = ball.y - ball.dy * speedMultiplier;
+            
+            // Determine which side was crossed
+            const wasLeftOf = prevX + ball.radius <= brick.x;
+            const wasRightOf = prevX - ball.radius >= brick.x + brick.width;
+            const wasAbove = prevY + ball.radius <= brick.y;
+            const wasBelow = prevY - ball.radius >= brick.y + brick.height;
+
+            // Bounce based on entry direction
+            if ((wasLeftOf || wasRightOf) && !hasBouncedX) {
+              ball.dx = -ball.dx;
+              hasBouncedX = true;
+              // Push ball out of brick
+              if (wasLeftOf) ball.x = brick.x - ball.radius - 1;
+              else ball.x = brick.x + brick.width + ball.radius + 1;
+            } else if ((wasAbove || wasBelow) && !hasBouncedY) {
+              ball.dy = -ball.dy;
+              hasBouncedY = true;
+              // Push ball out of brick
+              if (wasAbove) ball.y = brick.y - ball.radius - 1;
+              else ball.y = brick.y + brick.height + ball.radius + 1;
+            } else if (!hasBouncedX && !hasBouncedY) {
+              // Fallback: use overlap method but only once
               const overlapLeft = ball.x + ball.radius - brick.x;
               const overlapRight = brick.x + brick.width - (ball.x - ball.radius);
               const overlapTop = ball.y + ball.radius - brick.y;
@@ -410,12 +446,29 @@ const BreakoutProGame = () => {
 
               if (minOverlapX < minOverlapY) {
                 ball.dx = -ball.dx;
+                hasBouncedX = true;
+                ball.x += ball.dx > 0 ? minOverlapX + 1 : -(minOverlapX + 1);
               } else {
                 ball.dy = -ball.dy;
+                hasBouncedY = true;
+                ball.y += ball.dy > 0 ? minOverlapY + 1 : -(minOverlapY + 1);
               }
             }
           }
         });
+
+        // Ensure ball has minimum velocity to prevent getting stuck
+        const minVelocity = 2;
+        if (Math.abs(ball.dx) < minVelocity && Math.abs(ball.dy) < minVelocity) {
+          const speed = Math.hypot(ball.dx, ball.dy);
+          if (speed > 0) {
+            const scale = minVelocity / speed;
+            ball.dx *= scale * 1.5;
+            ball.dy *= scale * 1.5;
+          } else {
+            ball.dy = -minVelocity * 2;
+          }
+        }
 
         // Ball lost
         if (ball.y > CANVAS_HEIGHT + ball.radius) {
