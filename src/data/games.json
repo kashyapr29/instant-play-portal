@@ -133,10 +133,10 @@
     "id": "ninja-jump",
     "title": "Ninja Jump",
     "thumbnail": "/images/ninja-jump.png",
-    "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/ninja-jump/index.html",
+    "gameUrl": "/game/ninja-jump",
     "category": "Action",
-    "featured": false,
-    "description": "Jump, dodge, and fight your way through enemy-filled levels.",
-    "isPlayable": false
+    "featured": true,
+    "description": "Master wall jumps, collect coins, and climb through 8 unique themed worlds as an agile ninja warrior!",
+    "isPlayable": true
   }
 ]
