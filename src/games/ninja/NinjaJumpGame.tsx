@@ -1,513 +1,520 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Volume2, VolumeX, Pause, Play, Home, RotateCcw, Lock, Trophy, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, Home, RotateCcw } from 'lucide-react';
 import GameLayout from '@/components/GameLayout';
-import { Ninja, Platform, Collectible, Particle, Enemy, Obstacle, BackgroundElement, GameScreen, GameState, PlatformType, CollectibleType } from './types';
-import { LEVELS, getTotalLevels, calculateStars, getThemeColors } from './levels';
-import { loadProgress, saveProgress, updateBestScore, updateBestHeight, updateLevelStars, unlockLevel, addCoins, incrementStats, toggleSound, resetProgress } from './storage';
 import { ninjaAudioManager } from './audio';
-import { NinjaRenderer } from './renderer';
+import { loadProgress, toggleSound } from './storage';
 
-const CANVAS_WIDTH = 600;
-const CANVAS_HEIGHT = 800;
-const NINJA_WIDTH = 24;
-const NINJA_HEIGHT = 36;
-const GRAVITY = 0.5;
-const JUMP_FORCE = -14;
-const WALL_JUMP_FORCE = -12;
-const MOVE_SPEED = 6;
-const WALL_SLIDE_SPEED = 2;
-const DASH_SPEED = 20;
-const DASH_DURATION = 150;
+const CANVAS_WIDTH = 400;
+const CANVAS_HEIGHT = 700;
+const NINJA_SIZE = 30;
+const WALL_WIDTH = 25;
+const GAP_HEIGHT = 120;
+const WALL_SPEED_INITIAL = 2;
+
+interface Wall {
+  y: number;
+  gapStart: number;
+  side: 'left' | 'right';
+  passed: boolean;
+}
+
+interface Coin {
+  x: number;
+  y: number;
+  collected: boolean;
+}
+
+interface Ninja {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  movingRight: boolean;
+}
+
+type GameScreen = 'menu' | 'playing' | 'paused' | 'gameOver';
 
 const NinjaJumpGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
-  const rendererRef = useRef<NinjaRenderer | null>(null);
-  const keysRef = useRef<Set<string>>(new Set());
 
-  const [gameState, setGameState] = useState<GameState>({
-    screen: 'menu',
-    score: 0,
-    coins: 0,
-    height: 0,
-    maxHeight: 0,
-    level: 1,
-    lives: 3,
-    timeRemaining: 90,
-    activePowerUps: [],
-    stars: 0,
-  });
+  const [screen, setScreen] = useState<GameScreen>('menu');
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [progress, setProgress] = useState(loadProgress());
 
   const ninjaRef = useRef<Ninja>({
     x: CANVAS_WIDTH / 2,
-    y: 100,
-    vx: 0,
+    y: CANVAS_HEIGHT - 150,
+    vx: 5,
     vy: 0,
-    width: NINJA_WIDTH,
-    height: NINJA_HEIGHT,
-    facingRight: true,
-    isJumping: false,
-    isWallSliding: false,
-    wallSide: null,
-    isDashing: false,
-    dashCooldown: 0,
-    invincible: false,
-    invincibleTimer: 0,
-    combo: 0,
-    maxCombo: 0,
+    movingRight: true,
   });
 
-  const platformsRef = useRef<Platform[]>([]);
-  const collectiblesRef = useRef<Collectible[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
-  const enemiesRef = useRef<Enemy[]>([]);
-  const obstaclesRef = useRef<Obstacle[]>([]);
-  const bgElementsRef = useRef<BackgroundElement[]>([]);
-  const cameraYRef = useRef<number>(0);
-  const gameStateRef = useRef(gameState);
-  const lastPlatformYRef = useRef<number>(0);
-
-  const [progress, setProgress] = useState(loadProgress());
+  const wallsRef = useRef<Wall[]>([]);
+  const coinsRef = useRef<Coin[]>([]);
+  const scoreRef = useRef(0);
+  const wallSpeedRef = useRef(WALL_SPEED_INITIAL);
+  const screenRef = useRef<GameScreen>('menu');
 
   useEffect(() => {
-    gameStateRef.current = gameState;
-  }, [gameState]);
+    screenRef.current = screen;
+  }, [screen]);
 
   useEffect(() => {
     ninjaAudioManager.setEnabled(progress.soundEnabled);
+    const stored = localStorage.getItem('ninja_jump_high');
+    if (stored) setHighScore(parseInt(stored));
   }, [progress.soundEnabled]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    rendererRef.current = new NinjaRenderer(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
-  }, []);
-
-  const generatePlatform = useCallback((y: number, levelNum: number): Platform => {
-    const level = LEVELS[levelNum - 1];
-    const types: PlatformType[] = ['normal', 'bamboo', 'stone', 'wood'];
-    if (levelNum >= 3) types.push('crumbling');
-    if (levelNum >= 4) types.push('ice');
-    if (levelNum >= 5) types.push('bouncy');
-    if (levelNum >= 6) types.push('moving');
-
-    const type = types[Math.floor(Math.random() * types.length)];
-    const width = 60 + Math.random() * 60;
-
-    return {
-      x: 50 + Math.random() * (CANVAS_WIDTH - 100 - width),
-      y,
-      width,
-      height: 15,
-      type,
-      moving: type === 'moving',
-      moveSpeed: type === 'moving' ? 1 + Math.random() * 2 : 0,
-      moveRange: type === 'moving' ? 50 + Math.random() * 50 : 0,
-      startX: 0,
-    };
-  }, []);
-
-  const generateCollectible = useCallback((y: number): Collectible | null => {
-    if (Math.random() > 0.4) return null;
-    
-    const types: CollectibleType[] = ['coin', 'coin', 'coin', 'gem', 'scroll'];
-    if (Math.random() > 0.9) types.push('powerup_speed', 'powerup_jump', 'powerup_shield');
-    if (Math.random() > 0.95) types.push('health');
-
-    const type = types[Math.floor(Math.random() * types.length)];
-    const values: Record<CollectibleType, number> = {
-      coin: 10, gem: 50, scroll: 100, health: 0,
-      powerup_speed: 25, powerup_jump: 25, powerup_shield: 25, powerup_magnet: 25,
-    };
-
-    return {
-      x: 50 + Math.random() * (CANVAS_WIDTH - 100),
-      y: y + 30 + Math.random() * 40,
-      type,
-      collected: false,
-      value: values[type],
-      rotation: 0,
-    };
-  }, []);
-
-  const initLevel = useCallback((levelNum: number) => {
-    const level = LEVELS[levelNum - 1];
-    if (!level) return;
-
+  const initGame = useCallback(() => {
     const ninja = ninjaRef.current;
     ninja.x = CANVAS_WIDTH / 2;
-    ninja.y = 100;
-    ninja.vx = 0;
+    ninja.y = CANVAS_HEIGHT - 150;
+    ninja.vx = 5;
     ninja.vy = 0;
-    ninja.isJumping = false;
-    ninja.isWallSliding = false;
-    ninja.combo = 0;
-    ninja.invincible = false;
+    ninja.movingRight = true;
 
-    platformsRef.current = [];
-    collectiblesRef.current = [];
-    particlesRef.current = [];
-    enemiesRef.current = [];
-    obstaclesRef.current = [];
-    cameraYRef.current = 0;
-    lastPlatformYRef.current = 0;
+    wallsRef.current = [];
+    coinsRef.current = [];
+    scoreRef.current = 0;
+    wallSpeedRef.current = WALL_SPEED_INITIAL;
 
-    // Starting platform
-    platformsRef.current.push({
-      x: CANVAS_WIDTH / 2 - 60,
-      y: 50,
-      width: 120,
-      height: 15,
-      type: 'checkpoint',
-    });
+    // Generate initial walls
+    for (let i = 0; i < 8; i++) {
+      const y = CANVAS_HEIGHT - 300 - i * 150;
+      const side = i % 2 === 0 ? 'left' : 'right';
+      const gapStart = 100 + Math.random() * (CANVAS_HEIGHT - GAP_HEIGHT - 200);
+      wallsRef.current.push({ y, gapStart, side, passed: false });
 
-    // Generate initial platforms
-    for (let i = 1; i <= 20; i++) {
-      const y = i * (70 + Math.random() * 30);
-      platformsRef.current.push(generatePlatform(y, levelNum));
-      const collectible = generateCollectible(y);
-      if (collectible) collectiblesRef.current.push(collectible);
-      lastPlatformYRef.current = y;
+      // Add coins in gaps
+      if (Math.random() > 0.3) {
+        coinsRef.current.push({
+          x: side === 'left' ? WALL_WIDTH + 50 : CANVAS_WIDTH - WALL_WIDTH - 50,
+          y: y + gapStart + GAP_HEIGHT / 2,
+          collected: false,
+        });
+      }
     }
 
-    // Background elements
-    bgElementsRef.current = [];
-    for (let i = 0; i < 15; i++) {
-      bgElementsRef.current.push({
-        x: Math.random() * CANVAS_WIDTH,
-        y: Math.random() * 2000,
-        type: ['cloud', 'bird', 'lantern', 'tree'][Math.floor(Math.random() * 4)] as any,
-        speed: 0.2 + Math.random() * 0.3,
-        scale: 0.5 + Math.random() * 0.5,
-        opacity: 0.3 + Math.random() * 0.4,
-      });
-    }
+    setScore(0);
+    setScreen('playing');
+  }, []);
 
-    if (rendererRef.current) {
-      rendererRef.current.setTheme(level.theme);
-    }
-
-    setGameState(prev => ({
-      ...prev,
-      screen: 'playing',
-      score: 0,
-      coins: 0,
-      height: 0,
-      maxHeight: 0,
-      level: levelNum,
-      lives: 3,
-      timeRemaining: level.timeLimit,
-      activePowerUps: [],
-      stars: 0,
-    }));
-  }, [generatePlatform, generateCollectible]);
-
-  const spawnParticles = useCallback((x: number, y: number, color: string, count: number, type: 'dust' | 'spark' | 'star' = 'dust') => {
-    for (let i = 0; i < count; i++) {
-      particlesRef.current.push({
-        x, y,
-        vx: (Math.random() - 0.5) * 8,
-        vy: (Math.random() - 0.5) * 8,
-        life: 30 + Math.random() * 20,
-        maxLife: 50,
-        color,
-        size: 2 + Math.random() * 4,
-        type,
-      });
+  const handleTap = useCallback(() => {
+    if (screenRef.current === 'playing') {
+      const ninja = ninjaRef.current;
+      ninja.movingRight = !ninja.movingRight;
+      ninja.vx = ninja.movingRight ? 5 : -5;
+      ninja.vy = -8; // Jump up
+      ninjaAudioManager.jump();
     }
   }, []);
 
   const gameLoop = useCallback((timestamp: number) => {
-    if (!rendererRef.current) return;
-    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
     const deltaTime = Math.min((timestamp - lastTimeRef.current) / 16.67, 2);
     lastTimeRef.current = timestamp;
 
-    const state = gameStateRef.current;
-    if (state.screen !== 'playing') {
+    if (screenRef.current !== 'playing') {
       animationRef.current = requestAnimationFrame(gameLoop);
       return;
     }
 
     const ninja = ninjaRef.current;
-    const level = LEVELS[state.level - 1];
-    const gravity = level?.gravity || GRAVITY;
-
-    // Handle input
-    if (keysRef.current.has('ArrowLeft') || keysRef.current.has('KeyA')) {
-      ninja.vx = -MOVE_SPEED;
-      ninja.facingRight = false;
-    } else if (keysRef.current.has('ArrowRight') || keysRef.current.has('KeyD')) {
-      ninja.vx = MOVE_SPEED;
-      ninja.facingRight = true;
-    } else {
-      ninja.vx *= 0.85;
-    }
+    const walls = wallsRef.current;
+    const coins = coinsRef.current;
 
     // Apply gravity
-    ninja.vy += gravity * deltaTime;
-    if (ninja.isWallSliding && ninja.vy > 0) {
-      ninja.vy = Math.min(ninja.vy, WALL_SLIDE_SPEED);
-    }
-
-    // Move ninja
+    ninja.vy += 0.4 * deltaTime;
     ninja.x += ninja.vx * deltaTime;
     ninja.y += ninja.vy * deltaTime;
 
-    // Wall collision & sliding
-    ninja.isWallSliding = false;
-    ninja.wallSide = null;
-    if (ninja.x < ninja.width / 2) {
-      ninja.x = ninja.width / 2;
-      if (ninja.vy > 0 && (keysRef.current.has('ArrowLeft') || keysRef.current.has('KeyA'))) {
-        ninja.isWallSliding = true;
-        ninja.wallSide = 'left';
-      }
-    }
-    if (ninja.x > CANVAS_WIDTH - ninja.width / 2) {
-      ninja.x = CANVAS_WIDTH - ninja.width / 2;
-      if (ninja.vy > 0 && (keysRef.current.has('ArrowRight') || keysRef.current.has('KeyD'))) {
-        ninja.isWallSliding = true;
-        ninja.wallSide = 'right';
+    // Move walls down (ninja appears to go up)
+    walls.forEach(wall => {
+      wall.y += wallSpeedRef.current * deltaTime;
+    });
+    coins.forEach(coin => {
+      coin.y += wallSpeedRef.current * deltaTime;
+    });
+
+    // Wall collision - bounce off walls
+    const leftWallX = WALL_WIDTH;
+    const rightWallX = CANVAS_WIDTH - WALL_WIDTH;
+
+    // Check if ninja hits a wall
+    if (ninja.x - NINJA_SIZE / 2 < leftWallX) {
+      // Check if in gap
+      const wallAtPos = walls.find(w => w.side === 'left' && 
+        ninja.y > w.y + w.gapStart - NINJA_SIZE / 2 && 
+        ninja.y < w.y + w.gapStart + GAP_HEIGHT + NINJA_SIZE / 2);
+      
+      if (!wallAtPos) {
+        ninja.x = leftWallX + NINJA_SIZE / 2;
+        ninja.vx = 5;
+        ninja.movingRight = true;
+        ninja.vy = -10;
+        ninjaAudioManager.wallJump();
       }
     }
 
-    // Platform collision
-    let onPlatform = false;
-    platformsRef.current.forEach(platform => {
-      if (platform.moving && platform.startX !== undefined && platform.moveRange && platform.moveSpeed) {
-        platform.x = platform.startX + Math.sin(timestamp * 0.002 * platform.moveSpeed) * platform.moveRange;
+    if (ninja.x + NINJA_SIZE / 2 > rightWallX) {
+      const wallAtPos = walls.find(w => w.side === 'right' && 
+        ninja.y > w.y + w.gapStart - NINJA_SIZE / 2 && 
+        ninja.y < w.y + w.gapStart + GAP_HEIGHT + NINJA_SIZE / 2);
+      
+      if (!wallAtPos) {
+        ninja.x = rightWallX - NINJA_SIZE / 2;
+        ninja.vx = -5;
+        ninja.movingRight = false;
+        ninja.vy = -10;
+        ninjaAudioManager.wallJump();
+      }
+    }
+
+    // Check wall segment collision (game over)
+    let gameOver = false;
+    walls.forEach(wall => {
+      const wallX = wall.side === 'left' ? 0 : CANVAS_WIDTH - WALL_WIDTH;
+      const wallEndX = wall.side === 'left' ? WALL_WIDTH : CANVAS_WIDTH;
+      
+      // Top section of wall (above gap)
+      if (ninja.x - NINJA_SIZE / 2 < wallEndX && 
+          ninja.x + NINJA_SIZE / 2 > wallX &&
+          ninja.y + NINJA_SIZE / 2 > wall.y &&
+          ninja.y - NINJA_SIZE / 2 < wall.y + wall.gapStart) {
+        gameOver = true;
+      }
+      
+      // Bottom section of wall (below gap)
+      if (ninja.x - NINJA_SIZE / 2 < wallEndX && 
+          ninja.x + NINJA_SIZE / 2 > wallX &&
+          ninja.y + NINJA_SIZE / 2 > wall.y + wall.gapStart + GAP_HEIGHT &&
+          ninja.y - NINJA_SIZE / 2 < wall.y + CANVAS_HEIGHT) {
+        gameOver = true;
       }
 
-      if (ninja.vy >= 0 &&
-          ninja.x + ninja.width / 2 > platform.x &&
-          ninja.x - ninja.width / 2 < platform.x + platform.width &&
-          ninja.y > platform.y &&
-          ninja.y - ninja.height < platform.y + platform.height &&
-          ninja.y + ninja.vy * deltaTime >= platform.y) {
+      // Score when passing wall
+      if (!wall.passed && wall.y > ninja.y) {
+        wall.passed = true;
+        scoreRef.current++;
+        setScore(scoreRef.current);
         
-        if (platform.type !== 'spike') {
-          ninja.y = platform.y;
-          ninja.isJumping = false;
-          onPlatform = true;
-
-          if (platform.type === 'bouncy') {
-            ninja.vy = JUMP_FORCE * 1.5;
-            ninja.isJumping = true;
-            ninjaAudioManager.jump();
-            spawnParticles(ninja.x, ninja.y, '#ff7043', 5, 'spark');
-          } else if (platform.type === 'ice') {
-            ninja.vx *= 0.99;
-          } else if (platform.type === 'crumbling' && !platform.crumbling) {
-            platform.crumbling = true;
-            platform.crumbleTimer = 60;
-          } else {
-            ninja.vy = 0;
-          }
-
-          if (platform.type === 'checkpoint') {
-            ninjaAudioManager.checkpoint();
-          }
-        } else {
-          if (!ninja.invincible) {
-            setGameState(prev => ({ ...prev, lives: prev.lives - 1 }));
-            ninja.invincible = true;
-            ninja.invincibleTimer = 120;
-            ninja.vy = JUMP_FORCE;
-            ninjaAudioManager.hit();
-          }
+        // Increase speed every 5 points
+        if (scoreRef.current % 5 === 0) {
+          wallSpeedRef.current = Math.min(wallSpeedRef.current + 0.3, 6);
         }
       }
     });
 
-    // Crumbling platform update
-    platformsRef.current = platformsRef.current.filter(p => {
-      if (p.crumbling && p.crumbleTimer !== undefined) {
-        p.crumbleTimer--;
-        if (p.crumbleTimer <= 0) return false;
-      }
-      return true;
-    });
-
-    // Collectible collision
-    collectiblesRef.current.forEach(col => {
-      if (!col.collected) {
-        col.rotation += 0.05;
-        const dist = Math.hypot(ninja.x - col.x, ninja.y - ninja.height / 2 - col.y);
-        if (dist < 25) {
-          col.collected = true;
-          ninja.combo++;
-          
-          if (col.type === 'coin') {
-            ninjaAudioManager.collectCoin();
-            setGameState(prev => ({ ...prev, coins: prev.coins + 1, score: prev.score + col.value * ninja.combo }));
-          } else if (col.type === 'gem') {
-            ninjaAudioManager.collectGem();
-            setGameState(prev => ({ ...prev, coins: prev.coins + 5, score: prev.score + col.value * ninja.combo }));
-          } else if (col.type === 'health') {
-            setGameState(prev => ({ ...prev, lives: Math.min(prev.lives + 1, 5) }));
-          } else if (col.type.startsWith('powerup')) {
-            ninjaAudioManager.powerUp();
-            setGameState(prev => ({
-              ...prev,
-              score: prev.score + col.value,
-              activePowerUps: [...prev.activePowerUps, { type: col.type, endTime: Date.now() + 10000 }]
-            }));
-          }
-          
-          spawnParticles(col.x, col.y, '#ffd700', 8, 'star');
-        }
-      }
-    });
-
-    // Update invincibility
-    if (ninja.invincible) {
-      ninja.invincibleTimer--;
-      if (ninja.invincibleTimer <= 0) {
-        ninja.invincible = false;
-      }
-    }
-
-    // Camera follow
-    const targetCameraY = Math.max(0, ninja.y - CANVAS_HEIGHT / 3);
-    cameraYRef.current += (targetCameraY - cameraYRef.current) * 0.1;
-
-    // Update height & score
-    const currentHeight = Math.max(0, Math.floor(ninja.y / 10));
-    if (currentHeight > state.maxHeight) {
-      setGameState(prev => ({
-        ...prev,
-        height: currentHeight,
-        maxHeight: currentHeight,
-        score: prev.score + (currentHeight - prev.maxHeight) * 2,
-      }));
-    }
-
-    // Generate more platforms
-    while (lastPlatformYRef.current < cameraYRef.current + CANVAS_HEIGHT * 2) {
-      lastPlatformYRef.current += 70 + Math.random() * 40;
-      platformsRef.current.push(generatePlatform(lastPlatformYRef.current, state.level));
-      const col = generateCollectible(lastPlatformYRef.current);
-      if (col) collectiblesRef.current.push(col);
-    }
-
-    // Clean up off-screen objects
-    const minY = cameraYRef.current - 200;
-    platformsRef.current = platformsRef.current.filter(p => p.y > minY);
-    collectiblesRef.current = collectiblesRef.current.filter(c => c.y > minY && !c.collected);
-
-    // Update particles
-    particlesRef.current = particlesRef.current.filter(p => {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.2;
-      p.life--;
-      return p.life > 0;
-    });
-
-    // Check death (fell below camera)
-    if (ninja.y < cameraYRef.current - 100) {
+    if (gameOver) {
       ninjaAudioManager.death();
-      incrementStats('deaths');
-      setGameState(prev => {
-        if (prev.lives <= 1) {
-          return { ...prev, screen: 'gameOver', lives: 0 };
-        }
-        ninja.y = cameraYRef.current + CANVAS_HEIGHT / 2;
-        ninja.vy = 0;
-        ninja.invincible = true;
-        ninja.invincibleTimer = 120;
-        return { ...prev, lives: prev.lives - 1 };
-      });
+      setScreen('gameOver');
+      if (scoreRef.current > highScore) {
+        setHighScore(scoreRef.current);
+        localStorage.setItem('ninja_jump_high', scoreRef.current.toString());
+      }
     }
 
-    // Time update
-    setGameState(prev => {
-      const newTime = prev.timeRemaining - deltaTime / 60;
-      if (newTime <= 0) {
-        const stars = calculateStars(prev.score, level?.targetScore || 1000, prev.coins, prev.maxHeight);
-        updateLevelStars(prev.level, stars);
-        updateBestScore(prev.level, prev.score);
-        updateBestHeight(prev.level, prev.maxHeight);
-        addCoins(prev.coins);
-        if (stars >= 1 && prev.level < getTotalLevels()) {
-          unlockLevel(prev.level + 1);
+    // Collect coins
+    coins.forEach(coin => {
+      if (!coin.collected) {
+        const dist = Math.hypot(ninja.x - coin.x, ninja.y - coin.y);
+        if (dist < NINJA_SIZE) {
+          coin.collected = true;
+          scoreRef.current += 5;
+          setScore(scoreRef.current);
+          ninjaAudioManager.collectCoin();
         }
-        return { ...prev, screen: 'levelComplete', timeRemaining: 0, stars };
       }
-      return { ...prev, timeRemaining: newTime };
     });
 
-    // Render
-    rendererRef.current.setCameraY(cameraYRef.current);
-    rendererRef.current.clear();
-    rendererRef.current.drawBackground(bgElementsRef.current);
+    // Remove passed walls and generate new ones
+    if (walls.length > 0 && walls[0].y > CANVAS_HEIGHT + 100) {
+      walls.shift();
+      const lastWall = walls[walls.length - 1];
+      const newY = lastWall.y - 150;
+      const newSide = lastWall.side === 'left' ? 'right' : 'left';
+      const gapStart = 80 + Math.random() * (CANVAS_HEIGHT - GAP_HEIGHT - 160);
+      walls.push({ y: newY, gapStart, side: newSide, passed: false });
+
+      if (Math.random() > 0.4) {
+        coins.push({
+          x: newSide === 'left' ? WALL_WIDTH + 60 : CANVAS_WIDTH - WALL_WIDTH - 60,
+          y: newY + gapStart + GAP_HEIGHT / 2,
+          collected: false,
+        });
+      }
+    }
+
+    // Remove collected coins off screen
+    coinsRef.current = coins.filter(c => !c.collected && c.y < CANVAS_HEIGHT + 50);
+
+    // Death by falling
+    if (ninja.y > CANVAS_HEIGHT + 50 || ninja.y < -100) {
+      ninjaAudioManager.death();
+      setScreen('gameOver');
+      if (scoreRef.current > highScore) {
+        setHighScore(scoreRef.current);
+        localStorage.setItem('ninja_jump_high', scoreRef.current.toString());
+      }
+    }
+
+    // RENDER
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw beautiful gradient background (sky)
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    skyGradient.addColorStop(0, '#87CEEB');
+    skyGradient.addColorStop(0.4, '#98D8E8');
+    skyGradient.addColorStop(0.7, '#FFE4B5');
+    skyGradient.addColorStop(1, '#FFA07A');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw mountains in background
+    ctx.fillStyle = '#6B8E9F';
+    ctx.beginPath();
+    ctx.moveTo(0, CANVAS_HEIGHT - 200);
+    ctx.lineTo(80, CANVAS_HEIGHT - 350);
+    ctx.lineTo(160, CANVAS_HEIGHT - 200);
+    ctx.fill();
+
+    ctx.fillStyle = '#7BA3B5';
+    ctx.beginPath();
+    ctx.moveTo(100, CANVAS_HEIGHT - 180);
+    ctx.lineTo(200, CANVAS_HEIGHT - 380);
+    ctx.lineTo(300, CANVAS_HEIGHT - 180);
+    ctx.fill();
+
+    // Draw pagoda
+    const pagodaX = CANVAS_WIDTH / 2;
+    const pagodaY = CANVAS_HEIGHT - 280;
     
-    platformsRef.current.forEach(p => rendererRef.current!.drawPlatform(p));
-    collectiblesRef.current.forEach(c => rendererRef.current!.drawCollectible(c));
-    particlesRef.current.forEach(p => rendererRef.current!.drawParticle(p));
-    rendererRef.current.drawNinja(ninja);
-    rendererRef.current.drawHUD(state.score, state.coins, state.maxHeight, state.lives, state.level, state.timeRemaining, ninja.combo);
+    // Pagoda base
+    ctx.fillStyle = '#F4D03F';
+    ctx.fillRect(pagodaX - 40, pagodaY + 60, 80, 40);
+    
+    // Pagoda floors
+    for (let i = 0; i < 3; i++) {
+      const floorY = pagodaY + 40 - i * 35;
+      const floorWidth = 90 - i * 15;
+      
+      // Roof
+      ctx.fillStyle = '#C0392B';
+      ctx.beginPath();
+      ctx.moveTo(pagodaX - floorWidth / 2 - 15, floorY + 15);
+      ctx.lineTo(pagodaX, floorY - 10);
+      ctx.lineTo(pagodaX + floorWidth / 2 + 15, floorY + 15);
+      ctx.fill();
+      
+      // Floor
+      ctx.fillStyle = '#F4D03F';
+      ctx.fillRect(pagodaX - floorWidth / 2, floorY + 15, floorWidth, 20);
+      
+      // Windows
+      ctx.fillStyle = '#5DADE2';
+      ctx.fillRect(pagodaX - 8, floorY + 18, 16, 14);
+    }
+
+    // Draw grass hills
+    ctx.fillStyle = '#7DCE82';
+    ctx.beginPath();
+    ctx.ellipse(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 80, 250, 80, 0, Math.PI, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#5EBA62';
+    ctx.beginPath();
+    ctx.ellipse(80, CANVAS_HEIGHT - 50, 120, 60, 0, Math.PI, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#69C96D';
+    ctx.beginPath();
+    ctx.ellipse(CANVAS_WIDTH - 80, CANVAS_HEIGHT - 40, 130, 50, 0, Math.PI, 0);
+    ctx.fill();
+
+    // Draw water waves
+    const waveOffset = (Date.now() / 500) % (Math.PI * 2);
+    ctx.fillStyle = '#48C9B0';
+    ctx.beginPath();
+    ctx.moveTo(0, CANVAS_HEIGHT);
+    for (let x = 0; x <= CANVAS_WIDTH; x += 20) {
+      const y = CANVAS_HEIGHT - 40 + Math.sin(x * 0.05 + waveOffset) * 8;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fill();
+
+    ctx.fillStyle = '#3DB8A0';
+    ctx.beginPath();
+    ctx.moveTo(0, CANVAS_HEIGHT);
+    for (let x = 0; x <= CANVAS_WIDTH; x += 20) {
+      const y = CANVAS_HEIGHT - 25 + Math.sin(x * 0.06 + waveOffset + 1) * 6;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fill();
+
+    // Draw clouds
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    const drawCloud = (cx: number, cy: number, size: number) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, size, 0, Math.PI * 2);
+      ctx.arc(cx + size * 0.8, cy - size * 0.2, size * 0.7, 0, Math.PI * 2);
+      ctx.arc(cx + size * 1.5, cy, size * 0.8, 0, Math.PI * 2);
+      ctx.arc(cx + size * 0.7, cy + size * 0.3, size * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    drawCloud(100, 150, 25);
+    drawCloud(280, 100, 20);
+
+    // Draw walls (dark purple with red outline)
+    walls.forEach(wall => {
+      const wallX = wall.side === 'left' ? 0 : CANVAS_WIDTH - WALL_WIDTH;
+      
+      // Wall sections
+      ctx.fillStyle = '#2C2C54';
+      
+      // Top section (above gap)
+      ctx.fillRect(wallX, wall.y, WALL_WIDTH, wall.gapStart);
+      
+      // Bottom section (below gap)
+      ctx.fillRect(wallX, wall.y + wall.gapStart + GAP_HEIGHT, WALL_WIDTH, CANVAS_HEIGHT - wall.gapStart - GAP_HEIGHT);
+
+      // Red border on inner edge
+      ctx.strokeStyle = '#E74C3C';
+      ctx.lineWidth = 3;
+      
+      const innerX = wall.side === 'left' ? WALL_WIDTH : CANVAS_WIDTH - WALL_WIDTH;
+      
+      // Top section border
+      ctx.beginPath();
+      ctx.moveTo(innerX, wall.y);
+      ctx.lineTo(innerX, wall.y + wall.gapStart);
+      ctx.stroke();
+      
+      // Gap top border
+      ctx.beginPath();
+      ctx.moveTo(wallX, wall.y + wall.gapStart);
+      ctx.lineTo(innerX, wall.y + wall.gapStart);
+      ctx.stroke();
+      
+      // Gap bottom border
+      ctx.beginPath();
+      ctx.moveTo(wallX, wall.y + wall.gapStart + GAP_HEIGHT);
+      ctx.lineTo(innerX, wall.y + wall.gapStart + GAP_HEIGHT);
+      ctx.stroke();
+      
+      // Bottom section border
+      ctx.beginPath();
+      ctx.moveTo(innerX, wall.y + wall.gapStart + GAP_HEIGHT);
+      ctx.lineTo(innerX, wall.y + wall.gapStart + GAP_HEIGHT + CANVAS_HEIGHT);
+      ctx.stroke();
+    });
+
+    // Draw coins
+    coins.forEach(coin => {
+      if (!coin.collected) {
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(coin.x, coin.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#FFA500';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Shine
+        ctx.fillStyle = '#FFEC8B';
+        ctx.beginPath();
+        ctx.arc(coin.x - 3, coin.y - 3, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Draw ninja
+    ctx.save();
+    ctx.translate(ninja.x, ninja.y);
+    
+    // Body
+    ctx.fillStyle = '#1A1A2E';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, NINJA_SIZE / 2, NINJA_SIZE / 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Head
+    ctx.fillStyle = '#1A1A2E';
+    ctx.beginPath();
+    ctx.arc(0, -NINJA_SIZE / 2.5, NINJA_SIZE / 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Red headband
+    ctx.fillStyle = '#E74C3C';
+    ctx.fillRect(-NINJA_SIZE / 2.5, -NINJA_SIZE / 2.5 - 3, NINJA_SIZE / 1.2, 6);
+    
+    // Headband tail
+    ctx.beginPath();
+    ctx.moveTo(ninja.movingRight ? -NINJA_SIZE / 2.5 : NINJA_SIZE / 2.5, -NINJA_SIZE / 2.5);
+    const tailDir = ninja.movingRight ? -1 : 1;
+    ctx.quadraticCurveTo(
+      tailDir * NINJA_SIZE / 1.5, -NINJA_SIZE / 2,
+      tailDir * NINJA_SIZE / 1.2, -NINJA_SIZE / 3
+    );
+    ctx.lineTo(tailDir * NINJA_SIZE / 1.2, -NINJA_SIZE / 2.2);
+    ctx.quadraticCurveTo(
+      tailDir * NINJA_SIZE / 1.5, -NINJA_SIZE / 1.8,
+      ninja.movingRight ? -NINJA_SIZE / 2.5 : NINJA_SIZE / 2.5, -NINJA_SIZE / 2.5 + 6
+    );
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = '#FFF';
+    const eyeX = ninja.movingRight ? 3 : -3;
+    ctx.fillRect(eyeX - 4, -NINJA_SIZE / 2.5 - 2, 8, 4);
+    
+    ctx.restore();
 
     animationRef.current = requestAnimationFrame(gameLoop);
-  }, [generatePlatform, generateCollectible, spawnParticles]);
-
-  const handleJump = useCallback(() => {
-    const ninja = ninjaRef.current;
-    if (ninja.isWallSliding) {
-      ninja.vy = WALL_JUMP_FORCE;
-      ninja.vx = ninja.wallSide === 'left' ? MOVE_SPEED * 2 : -MOVE_SPEED * 2;
-      ninja.isJumping = true;
-      ninja.isWallSliding = false;
-      ninjaAudioManager.wallJump();
-      incrementStats('jumps');
-      spawnParticles(ninja.x, ninja.y, '#64ffda', 5, 'dust');
-    } else if (!ninja.isJumping) {
-      ninja.vy = JUMP_FORCE;
-      ninja.isJumping = true;
-      ninjaAudioManager.jump();
-      incrementStats('jumps');
-      spawnParticles(ninja.x, ninja.y, '#888', 3, 'dust');
-    }
-  }, [spawnParticles]);
+  }, [highScore]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      keysRef.current.add(e.code);
-      if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameStateRef.current.screen === 'playing') {
+      if (e.code === 'Space' && screenRef.current === 'playing') {
         e.preventDefault();
-        handleJump();
+        handleTap();
       }
-      if (e.code === 'Escape' && gameStateRef.current.screen === 'playing') {
-        setGameState(prev => ({ ...prev, screen: 'paused' }));
+      if (e.code === 'Escape' && screenRef.current === 'playing') {
+        setScreen('paused');
       }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current.delete(e.code);
+    const handleClick = () => {
+      if (screenRef.current === 'playing') {
+        handleTap();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    canvasRef.current?.addEventListener('click', handleClick);
+    
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      canvasRef.current?.removeEventListener('click', handleClick);
     };
-  }, [handleJump]);
+  }, [handleTap]);
 
   useEffect(() => {
-    if (gameState.screen === 'playing') {
-      lastTimeRef.current = performance.now();
-      animationRef.current = requestAnimationFrame(gameLoop);
-    }
+    lastTimeRef.current = performance.now();
+    animationRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [gameState.screen, gameLoop]);
+  }, [gameLoop]);
 
   const handleToggleSound = () => {
     const newProgress = toggleSound();
@@ -515,137 +522,19 @@ const NinjaJumpGame = () => {
     ninjaAudioManager.menuClick();
   };
 
-  // Render UI screens
-  const renderMenu = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-400 mb-2">
-        忍者ジャンプ
-      </h1>
-      <h2 className="text-3xl font-bold text-foreground mb-8">NINJA JUMP</h2>
-      
-      <div className="flex flex-col gap-4 w-64">
-        <button onClick={() => initLevel(1)} className="px-8 py-4 bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold rounded-xl hover:scale-105 transition-transform">
-          <Play className="inline mr-2 h-5 w-5" /> START GAME
-        </button>
-        <button onClick={() => setGameState(prev => ({ ...prev, screen: 'levelSelect' }))} className="px-8 py-4 bg-secondary text-foreground font-bold rounded-xl hover:bg-secondary/80 transition-colors">
-          <Trophy className="inline mr-2 h-5 w-5" /> LEVEL SELECT
-        </button>
-      </div>
-
-      <div className="absolute bottom-8 text-muted-foreground text-sm">
-        Use Arrow Keys / WASD to move • Space to Jump
-      </div>
-    </div>
-  );
-
-  const renderLevelSelect = () => (
-    <div className="absolute inset-0 flex flex-col items-center bg-gradient-to-b from-slate-900 to-slate-800 p-6 overflow-auto">
-      <button onClick={() => setGameState(prev => ({ ...prev, screen: 'menu' }))} className="absolute top-4 left-4 p-2 rounded-lg bg-secondary hover:bg-secondary/80">
-        <ChevronLeft className="h-6 w-6" />
-      </button>
-      
-      <h2 className="text-3xl font-bold text-foreground mb-6">SELECT LEVEL</h2>
-      
-      <div className="grid grid-cols-2 gap-4 max-w-md">
-        {LEVELS.map(level => {
-          const isUnlocked = level.id <= progress.highestUnlockedLevel;
-          const stars = progress.levelStars[level.id] || 0;
-          const colors = getThemeColors(level.theme);
-          
-          return (
-            <button
-              key={level.id}
-              onClick={() => isUnlocked && initLevel(level.id)}
-              disabled={!isUnlocked}
-              className={`p-4 rounded-xl border-2 transition-all ${isUnlocked ? 'hover:scale-105 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
-              style={{ borderColor: colors.primary, background: `linear-gradient(135deg, ${colors.bg[0]}, ${colors.bg[1]})` }}
-            >
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-lg font-bold text-white">Level {level.id}</span>
-                {!isUnlocked && <Lock className="h-4 w-4 text-white/60" />}
-              </div>
-              <p className="text-sm text-white/80 mb-2">{level.name}</p>
-              <div className="flex gap-1">
-                {[1, 2, 3].map(i => (
-                  <Star key={i} className={`h-4 w-4 ${i <= stars ? 'text-yellow-400 fill-yellow-400' : 'text-white/30'}`} />
-                ))}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const renderPaused = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-      <h2 className="text-4xl font-bold text-white mb-8">PAUSED</h2>
-      <div className="flex flex-col gap-4">
-        <button onClick={() => setGameState(prev => ({ ...prev, screen: 'playing' }))} className="px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:scale-105 transition-transform">
-          <Play className="inline mr-2 h-5 w-5" /> RESUME
-        </button>
-        <button onClick={() => initLevel(gameState.level)} className="px-8 py-3 bg-secondary text-foreground font-bold rounded-xl hover:bg-secondary/80">
-          <RotateCcw className="inline mr-2 h-5 w-5" /> RESTART
-        </button>
-        <button onClick={() => setGameState(prev => ({ ...prev, screen: 'menu' }))} className="px-8 py-3 bg-destructive text-destructive-foreground font-bold rounded-xl hover:bg-destructive/80">
-          <Home className="inline mr-2 h-5 w-5" /> QUIT
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderGameOver = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90">
-      <h2 className="text-4xl font-bold text-red-500 mb-4">GAME OVER</h2>
-      <p className="text-2xl text-white mb-2">Score: {gameState.score}</p>
-      <p className="text-xl text-muted-foreground mb-8">Height: {gameState.maxHeight}m</p>
-      <div className="flex gap-4">
-        <button onClick={() => initLevel(gameState.level)} className="px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:scale-105 transition-transform">
-          TRY AGAIN
-        </button>
-        <button onClick={() => setGameState(prev => ({ ...prev, screen: 'menu' }))} className="px-8 py-3 bg-secondary text-foreground font-bold rounded-xl">
-          MENU
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderLevelComplete = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90">
-      <h2 className="text-4xl font-bold text-green-400 mb-4">LEVEL COMPLETE!</h2>
-      <div className="flex gap-2 mb-4">
-        {[1, 2, 3].map(i => (
-          <Star key={i} className={`h-10 w-10 ${i <= gameState.stars ? 'text-yellow-400 fill-yellow-400' : 'text-white/30'}`} />
-        ))}
-      </div>
-      <p className="text-2xl text-white mb-2">Score: {gameState.score}</p>
-      <p className="text-lg text-muted-foreground mb-8">Coins: {gameState.coins} | Height: {gameState.maxHeight}m</p>
-      <div className="flex gap-4">
-        {gameState.level < getTotalLevels() && (
-          <button onClick={() => initLevel(gameState.level + 1)} className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl hover:scale-105 transition-transform">
-            NEXT LEVEL
-          </button>
-        )}
-        <button onClick={() => setGameState(prev => ({ ...prev, screen: 'levelSelect' }))} className="px-8 py-3 bg-secondary text-foreground font-bold rounded-xl">
-          LEVEL SELECT
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <GameLayout
       gameId="ninja-jump"
       title="Ninja Jump"
-      score={gameState.score}
-      highScore={progress.bestScores[gameState.level] || 0}
+      score={score}
+      highScore={highScore}
       isMuted={!progress.soundEnabled}
       onToggleMute={handleToggleSound}
       showAudioControl
     >
       <Helmet>
-        <title>Ninja Jump - Action Platform Game</title>
-        <meta name="description" content="Jump, wall-climb, and dash through challenging levels as a skilled ninja!" />
+        <title>Ninja Jump - Wall Bounce Action Game</title>
+        <meta name="description" content="Bounce between walls, collect coins, and climb as high as you can!" />
       </Helmet>
 
       <div className="relative" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
@@ -653,23 +542,118 @@ const NinjaJumpGame = () => {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="rounded-lg"
-          style={{ background: '#1a1a2e' }}
+          className="rounded-lg cursor-pointer"
         />
 
-        {gameState.screen === 'menu' && renderMenu()}
-        {gameState.screen === 'levelSelect' && renderLevelSelect()}
-        {gameState.screen === 'paused' && renderPaused()}
-        {gameState.screen === 'gameOver' && renderGameOver()}
-        {gameState.screen === 'levelComplete' && renderLevelComplete()}
+        {/* Score display */}
+        {screen === 'playing' && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/90 px-6 py-2 rounded-lg border-2 border-slate-600">
+            <span className="text-2xl font-bold text-white font-mono">{score}</span>
+          </div>
+        )}
 
-        {gameState.screen === 'playing' && (
+        {/* Sound button */}
+        {screen === 'playing' && (
           <button
-            onClick={() => setGameState(prev => ({ ...prev, screen: 'paused' }))}
-            className="absolute top-16 right-4 p-2 bg-black/50 rounded-lg hover:bg-black/70"
+            onClick={handleToggleSound}
+            className="absolute top-4 left-4 p-3 bg-red-500/90 rounded-full hover:bg-red-600 transition-colors"
+          >
+            {progress.soundEnabled ? (
+              <Volume2 className="h-5 w-5 text-white" />
+            ) : (
+              <VolumeX className="h-5 w-5 text-white" />
+            )}
+          </button>
+        )}
+
+        {/* Pause button */}
+        {screen === 'playing' && (
+          <button
+            onClick={() => setScreen('paused')}
+            className="absolute top-4 right-4 p-3 bg-red-500/90 rounded-full hover:bg-red-600 transition-colors"
           >
             <Pause className="h-5 w-5 text-white" />
           </button>
+        )}
+
+        {/* Menu Screen */}
+        {screen === 'menu' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/95 to-slate-800/95 rounded-lg">
+            <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-400 mb-2">
+              忍者ジャンプ
+            </h1>
+            <h2 className="text-2xl font-bold text-white mb-8">NINJA JUMP</h2>
+            
+            <button
+              onClick={initGame}
+              className="px-10 py-4 bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-xl rounded-xl hover:scale-105 transition-transform shadow-lg"
+            >
+              <Play className="inline mr-2 h-6 w-6" /> START GAME
+            </button>
+
+            {highScore > 0 && (
+              <p className="mt-6 text-yellow-400 text-lg">Best: {highScore}</p>
+            )}
+
+            <div className="absolute bottom-8 text-center text-white/70 text-sm px-4">
+              <p>Tap or Press Space to change direction</p>
+              <p>Navigate through the gaps!</p>
+            </div>
+          </div>
+        )}
+
+        {/* Paused Screen */}
+        {screen === 'paused' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-lg">
+            <h2 className="text-3xl font-bold text-white mb-8">PAUSED</h2>
+            <div className="flex flex-col gap-4">
+              <button
+                onClick={() => setScreen('playing')}
+                className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                <Play className="inline mr-2 h-5 w-5" /> RESUME
+              </button>
+              <button
+                onClick={initGame}
+                className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                <RotateCcw className="inline mr-2 h-5 w-5" /> RESTART
+              </button>
+              <button
+                onClick={() => setScreen('menu')}
+                className="px-8 py-3 bg-red-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                <Home className="inline mr-2 h-5 w-5" /> QUIT
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Game Over Screen */}
+        {screen === 'gameOver' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 rounded-lg">
+            <h2 className="text-4xl font-bold text-red-500 mb-4">GAME OVER</h2>
+            <p className="text-3xl text-white mb-2">Score: {score}</p>
+            {score >= highScore && score > 0 && (
+              <p className="text-yellow-400 text-lg mb-4">🎉 New High Score!</p>
+            )}
+            <p className="text-muted-foreground mb-8">Best: {highScore}</p>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={initGame}
+                className="px-8 py-3 bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                TRY AGAIN
+              </button>
+              <button
+                onClick={() => setScreen('menu')}
+                className="px-8 py-3 bg-slate-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                MENU
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </GameLayout>
