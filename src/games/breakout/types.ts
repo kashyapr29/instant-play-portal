@@ -28,6 +28,8 @@ export interface Brick {
   type: BrickType;
   color: string;
   glowColor: string;
+  damageLevel: number; // 0 = pristine, 1 = cracked, 2 = heavily damaged, 3 = destroyed
+  theme: 'neon' | 'metal' | 'crystal' | 'lava' | 'cyber' | 'cosmic';
 }
 
 export type BrickType = 'normal' | 'strong' | 'unbreakable' | 'explosive' | 'powerup';
@@ -58,6 +60,7 @@ export interface Level {
   layout: (number | string)[][];
   ballSpeed: number;
   description: string;
+  theme: 'neon' | 'metal' | 'crystal' | 'lava' | 'cyber' | 'cosmic';
 }
 
 export interface GameProgress {

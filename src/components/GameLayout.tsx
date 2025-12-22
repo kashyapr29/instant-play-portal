@@ -111,15 +111,18 @@ const GameLayout = ({
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col lg:flex-row gap-6">
+      <div className={isFullscreen ? '' : 'container mx-auto px-4 py-6'}>
+        <div className={`flex flex-col lg:flex-row ${isFullscreen ? 'gap-0' : 'gap-6'}`}>
           {/* Game Area */}
-          <div className="flex-1">
+          <div className={`${isFullscreen ? 'w-full h-screen' : 'flex-1'}`}>
             <div
               ref={gameContainerRef}
-              className={`relative bg-card rounded-xl border border-border overflow-hidden ${
-                isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none flex items-center justify-center bg-background' : ''
+              className={`relative bg-card flex items-center justify-center ${
+                isFullscreen 
+                  ? 'fixed inset-0 z-50 rounded-none border-none bg-background w-full h-screen' 
+                  : 'rounded-xl border border-border w-full'
               }`}
+              style={isFullscreen ? {} : { minHeight: '900px' }}
             >
               {isFullscreen && (
                 <button
@@ -130,12 +133,13 @@ const GameLayout = ({
                   <span>Exit Fullscreen</span>
                 </button>
               )}
-              <div className={isFullscreen ? 'w-full h-full flex items-center justify-center' : ''}>
+              <div className="w-full h-full flex items-center justify-center">
                 {children}
               </div>
             </div>
 
             {/* Game Description */}
+            {!isFullscreen && (
             <div className="mt-6 p-6 bg-card rounded-xl border border-border">
               <h2 className="text-xl font-bold mb-3">{title}</h2>
               <p className="text-muted-foreground mb-4">{currentGame?.description}</p>
@@ -176,10 +180,11 @@ const GameLayout = ({
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Related Games Sidebar */}
-          {relatedGames.length > 0 && (
+          {!isFullscreen && relatedGames.length > 0 && (
             <div className="lg:w-72 xl:w-80">
               <div className="bg-card rounded-xl border border-border p-4 sticky top-24">
                 <h3 className="font-bold text-lg mb-4">More {currentGame?.category} Games</h3>
