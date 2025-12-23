@@ -103,11 +103,11 @@
     "id": "chess-master",
     "title": "Chess Master",
     "thumbnail": "/images/chess-master.png",
-    "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/chess-master/index.html",
+    "gameUrl": "/game/chess-master",
     "category": "Strategy",
-    "featured": false,
-    "description": "Test your strategic thinking against AI opponents of varying difficulty.",
-    "isPlayable": false
+    "featured": true,
+    "description": "Play chess with beautiful graphics! Challenge a friend or battle AI across 10 difficulty levels.",
+    "isPlayable": true
   },
   {
     "id": "space-invaders",

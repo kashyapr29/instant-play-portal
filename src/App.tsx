@@ -21,6 +21,7 @@ import ClickerGame from "./games/ClickerGame";
 import BreakoutGame from "./games/BreakoutGame";
 import Game2048 from "./games/Game2048";
 import NinjaJumpGame from "./games/NinjaJumpGame";
+import ChessMasterGame from "./games/ChessMasterGame";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/game/breakout" element={<BreakoutGame />} />
             <Route path="/game/2048" element={<Game2048 />} />
             <Route path="/game/ninja-jump" element={<NinjaJumpGame />} />
+            <Route path="/game/chess-master" element={<ChessMasterGame />} />
             
             {/* Info Pages */}
             <Route path="/developers" element={<Developers />} />
