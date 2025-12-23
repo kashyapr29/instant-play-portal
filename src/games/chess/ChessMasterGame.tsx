@@ -178,21 +178,32 @@ const ChessMasterGame = () => {
     executeMove(promotionPending.from, promotionPending.to, pieceType);
   }, [promotionPending, executeMove]);
 
-  // AI move
+  // AI move - using a ref to avoid stale closure issues
   useEffect(() => {
     if (gameState.gameMode !== 'pvc' || gameState.currentPlayer !== 'black' || 
-        gameState.status === 'checkmate' || gameState.status === 'stalemate' || gameState.isThinking) {
+        gameState.status === 'checkmate' || gameState.status === 'stalemate') {
       return;
     }
 
+    if (gameState.isThinking) {
+      return;
+    }
+
+    // Mark as thinking
     setGameState(prev => ({ ...prev, isThinking: true }));
 
+    // Use a small delay for better UX, then compute AI move
     const timer = setTimeout(() => {
-      const aiMove = getBestMove(gameState.board, 'black', gameState.enPassantTarget, gameState.aiLevel);
-      
-      if (aiMove) {
-        const newBoard = makeMove(gameState.board, aiMove);
-        const nextPlayer = 'white';
+      setGameState(prev => {
+        // Get the AI's best move using current state from prev
+        const aiMove = getBestMove(prev.board, 'black', prev.enPassantTarget, prev.aiLevel);
+        
+        if (!aiMove) {
+          return { ...prev, isThinking: false };
+        }
+
+        const newBoard = makeMove(prev.board, aiMove);
+        const nextPlayer: PieceColor = 'white';
 
         let newEnPassant: Position | null = null;
         if (aiMove.piece.type === 'pawn' && Math.abs(aiMove.to.row - aiMove.from.row) === 2) {
@@ -202,13 +213,16 @@ const ChessMasterGame = () => {
           };
         }
 
-        const newCaptured = { ...gameState.capturedPieces };
+        const newCaptured = { 
+          white: [...prev.capturedPieces.white], 
+          black: [...prev.capturedPieces.black] 
+        };
         if (aiMove.captured) {
           newCaptured[aiMove.captured.color].push(aiMove.captured);
         }
 
-        let status = gameState.status;
-        let winner = gameState.winner;
+        let status: GameState['status'] = 'playing';
+        let winner: PieceColor | null = null;
 
         if (isCheckmate(newBoard, nextPlayer, newEnPassant)) {
           status = 'checkmate';
@@ -219,15 +233,14 @@ const ChessMasterGame = () => {
         } else if (isInCheck(newBoard, nextPlayer)) {
           status = 'check';
           chessAudio.check();
-        } else {
-          status = 'playing';
         }
 
+        // Play sound
         if (aiMove.isCastling) chessAudio.castle();
         else if (aiMove.captured) chessAudio.capture();
         else chessAudio.move();
 
-        setGameState(prev => ({
+        return {
           ...prev,
           board: newBoard,
           currentPlayer: nextPlayer,
@@ -237,11 +250,9 @@ const ChessMasterGame = () => {
           winner,
           enPassantTarget: newEnPassant,
           isThinking: false,
-        }));
-      } else {
-        setGameState(prev => ({ ...prev, isThinking: false }));
-      }
-    }, 500);
+        };
+      });
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [gameState.currentPlayer, gameState.gameMode, gameState.status, gameState.isThinking]);
