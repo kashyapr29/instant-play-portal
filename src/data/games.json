@@ -138,5 +138,25 @@
     "featured": true,
     "description": "Master wall jumps, collect coins, and climb through 8 unique themed worlds as an agile ninja warrior!",
     "isPlayable": true
+  },
+  {
+    "id": "tetris",
+    "title": "Block Stack",
+    "thumbnail": "/images/tetris-game.png",
+    "gameUrl": "/game/tetris",
+    "category": "Puzzle",
+    "featured": true,
+    "description": "The classic block stacking game! Clear lines and prevent the stack from reaching the top.",
+    "isPlayable": true
+  },
+  {
+    "id": "minesweeper",
+    "title": "Minesweeper",
+    "thumbnail": "/images/minesweeper-game.png",
+    "gameUrl": "/game/minesweeper",
+    "category": "Puzzle",
+    "featured": false,
+    "description": "Clear the minefield without detonating any bombs. Use logic and flags to survive!",
+    "isPlayable": true
   }
 ]

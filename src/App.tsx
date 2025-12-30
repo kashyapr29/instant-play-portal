@@ -22,6 +22,8 @@ import BreakoutGame from "./games/BreakoutGame";
 import Game2048 from "./games/Game2048";
 import NinjaJumpGame from "./games/NinjaJumpGame";
 import ChessMasterGame from "./games/ChessMasterGame";
+import TetrisGame from "./games/tetris/TetrisGame";
+import MinesweeperGame from "./games/minesweeper/MinesweeperGame";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +51,8 @@ const App = () => (
             <Route path="/game/2048" element={<Game2048 />} />
             <Route path="/game/ninja-jump" element={<NinjaJumpGame />} />
             <Route path="/game/chess-master" element={<ChessMasterGame />} />
+            <Route path="/game/tetris" element={<TetrisGame />} />
+            <Route path="/game/minesweeper" element={<MinesweeperGame />} />
             
             {/* Info Pages */}
             <Route path="/developers" element={<Developers />} />

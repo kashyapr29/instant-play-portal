@@ -53,7 +53,7 @@ const ChessMasterGame = () => {
   }, [gameState.aiLevel]);
 
   const handleSquareClick = useCallback((row: number, col: number) => {
-    if (gameState.status !== 'playing' || gameState.isThinking) return;
+    if ((gameState.status !== 'playing' && gameState.status !== 'check') || gameState.isThinking) return;
     if (gameState.gameMode === 'pvc' && gameState.currentPlayer === 'black') return;
 
     const clickedPiece = gameState.board[row][col];
@@ -178,27 +178,25 @@ const ChessMasterGame = () => {
     executeMove(promotionPending.from, promotionPending.to, pieceType);
   }, [promotionPending, executeMove]);
 
-  // AI move - using a ref to avoid stale closure issues
+  // AI move - trigger only when it becomes black's turn
   useEffect(() => {
     if (gameState.gameMode !== 'pvc' || gameState.currentPlayer !== 'black' || 
-        gameState.status === 'checkmate' || gameState.status === 'stalemate') {
+        gameState.status === 'checkmate' || gameState.status === 'stalemate' ||
+        gameState.isThinking) {
       return;
     }
 
-    if (gameState.isThinking) {
-      return;
-    }
-
-    // Mark as thinking
+    // Mark as thinking immediately
     setGameState(prev => ({ ...prev, isThinking: true }));
 
-    // Use a small delay for better UX, then compute AI move
+    // Compute AI move immediately with minimal delay for UX
     const timer = setTimeout(() => {
       setGameState(prev => {
         // Get the AI's best move using current state from prev
         const aiMove = getBestMove(prev.board, 'black', prev.enPassantTarget, prev.aiLevel);
         
         if (!aiMove) {
+          // No valid moves, shouldn't happen but fallback
           return { ...prev, isThinking: false };
         }
 
@@ -252,10 +250,10 @@ const ChessMasterGame = () => {
           isThinking: false,
         };
       });
-    }, 300);
+    }, 0);
 
     return () => clearTimeout(timer);
-  }, [gameState.currentPlayer, gameState.gameMode, gameState.status, gameState.isThinking]);
+  }, [gameState.currentPlayer, gameState.gameMode, gameState.status]);
 
   const renderBoard = () => {
     const squares = [];
