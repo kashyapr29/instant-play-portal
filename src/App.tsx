@@ -27,6 +27,9 @@ import MinesweeperGame from "./games/minesweeper/MinesweeperGame";
 
 const queryClient = new QueryClient();
 
+import SpaceShooter from "./games/space-shooter/SpaceShooter";
+import TowerDefense from "./games/tower-defense/TowerDefense";
+
 const App = () => (
   <HelmetProvider>
     <QueryClientProvider client={queryClient}>
@@ -40,6 +43,8 @@ const App = () => (
             
             {/* Playable Games */}
             <Route path="/game/snake" element={<SnakeGame />} />
+            <Route path="/game/space-shooter" element={<SpaceShooter />} />
+            <Route path="/game/tower-defense" element={<TowerDefense />} />
             <Route path="/game/snake-game" element={<SnakeGame />} />
             <Route path="/game/memory" element={<MemoryGame />} />
             <Route path="/game/memory-match" element={<MemoryGame />} />

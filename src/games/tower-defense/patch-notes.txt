@@ -1,0 +1,15 @@
+Patch summary:
+- Added wave management refs and per-wave enemy counts
+- Introduced 'elite' enemy type (visual and stronger stats) and increased boss chance on milestone waves
+- Spawn logic now respects per-wave enemy counts and advances waves when complete
+- Added towerLevelsRef to track tower levels without changing imported Tower interface
+- Added UI to select a tower and upgrade/sell it (overlay near canvas)
+- Upgrade increases damage/range and improves fireRate; Sell frees spot and refunds partial gold
+- Reset clears waves and occupied spots
+
+Files edited:
+- src/games/tower-defense/TowerDefense.tsx
+
+Notes:
+- Tower objects keep existing shape; levels are tracked separately in towerLevelsRef to avoid type mismatch.
+- Upgrade and sell costs are tunable constants in the file.

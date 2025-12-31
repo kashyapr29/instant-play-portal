@@ -6,7 +6,7 @@ const audioContext = typeof window !== 'undefined' ? new (window.AudioContext ||
 type SoundType = 
   | 'click' | 'success' | 'fail' | 'move' | 'merge' 
   | 'bounce' | 'break' | 'lose' | 'win' | 'match' 
-  | 'flip' | 'powerup' | 'gameOver';
+  | 'flip' | 'powerup' | 'gameOver' | 'shoot' | 'explosion';
 
 const playTone = (frequency: number, duration: number, type: OscillatorType = 'sine', volume = 0.3) => {
   if (!audioContext) return;
@@ -27,12 +27,33 @@ const playTone = (frequency: number, duration: number, type: OscillatorType = 's
   oscillator.stop(audioContext.currentTime + duration);
 };
 
+const playNoise = (duration: number, volume = 0.1) => {
+  if (!audioContext) return;
+  const bufferSize = audioContext.sampleRate * duration;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  const source = audioContext.createBufferSource();
+  const gainNode = audioContext.createGain();
+  source.buffer = buffer;
+  source.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+  source.start();
+  source.stop(audioContext.currentTime + duration);
+};
+
 const playChord = (frequencies: number[], duration: number, type: OscillatorType = 'sine', volume = 0.15) => {
   frequencies.forEach(freq => playTone(freq, duration, type, volume));
 };
 
-const soundEffects: Record<SoundType, () => void> = {
+const soundEffects: Record<string, () => void> = {
   click: () => playTone(800, 0.1, 'square', 0.2),
+  shoot: () => playTone(400, 0.1, 'sawtooth', 0.1),
+  explosion: () => playNoise(0.3, 0.3),
   success: () => {
     playTone(523, 0.15, 'sine', 0.3);
     setTimeout(() => playTone(659, 0.15, 'sine', 0.3), 100);
@@ -95,7 +116,7 @@ export const useGameAudio = () => {
     localStorage.setItem('game_audio_muted', String(isMuted));
   }, [isMuted]);
 
-  const playSound = useCallback((sound: SoundType) => {
+  const playSound = useCallback((sound: string) => {
     if (mutedRef.current || !audioContext) return;
     
     // Resume audio context if suspended (browser autoplay policy)
@@ -103,7 +124,8 @@ export const useGameAudio = () => {
       audioContext.resume();
     }
     
-    soundEffects[sound]?.();
+    const effect = (soundEffects as Record<string, () => void>)[sound];
+    effect?.();
   }, []);
 
   const toggleMute = useCallback(() => {

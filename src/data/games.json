@@ -1,5 +1,25 @@
 [
   {
+    "id": "space-shooter",
+    "title": "Space Defender",
+    "thumbnail": "/images/space-invaders.png",
+    "gameUrl": "/game/space-shooter",
+    "category": "Action",
+    "featured": true,
+    "description": "Defend the galaxy from waves of invaders in this high-octane space shooter.",
+    "isPlayable": true
+  },
+  {
+    "id": "tower-defense",
+    "title": "Fortress Defense",
+    "thumbnail": "/images/strike-pinball.png",
+    "gameUrl": "/game/tower-defense",
+    "category": "Strategy",
+    "featured": true,
+    "description": "Build towers and defend your kingdom against endless waves of enemies.",
+    "isPlayable": true
+  },
+  {
     "id": "snake-game",
     "title": "Snake Classic",
     "thumbnail": "/images/snake-game.png",
