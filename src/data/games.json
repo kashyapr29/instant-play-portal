@@ -178,5 +178,15 @@
     "featured": false,
     "description": "Clear the minefield without detonating any bombs. Use logic and flags to survive!",
     "isPlayable": true
+  },
+  {
+    "id": "tennis-hero",
+    "title": "Tennis Hero",
+    "thumbnail": "/images/racing-thunder.png",
+    "gameUrl": "/game/tennis-hero",
+    "category": "Sports",
+    "featured": true,
+    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "isPlayable": true
   }
 ]
