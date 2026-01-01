@@ -182,7 +182,7 @@
   {
     "id": "tennis-hero",
     "title": "Tennis Hero",
-    "thumbnail": "/images/racing-thunder.png",
+    "thumbnail": "/images/tennis-hero.png",
     "gameUrl": "/game/tennis-hero",
     "category": "Sports",
     "featured": true,
