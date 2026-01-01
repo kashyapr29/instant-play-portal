@@ -19,7 +19,11 @@ export const useTetris = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [clearedRows, setClearedRows] = useState<number[]>([]);
 
-  const [player, setPlayer] = useState({
+  const [player, setPlayer] = useState<{
+    pos: { x: number; y: number };
+    tetromino: (string | number)[][];
+    collided: boolean;
+  }>({
     pos: { x: 0, y: 0 },
     tetromino: TETROMINOES[0].shape,
     collided: false,
