@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 
 // Playable Games
 import SnakeGame from "./games/SnakeGame";
+import SpaceShooter from "./games/space-shooter/SpaceShooter";
 import MemoryGame from "./games/MemoryGame";
 import TicTacToe from "./games/TicTacToe";
 import ClickerGame from "./games/ClickerGame";
@@ -24,11 +25,9 @@ import NinjaJumpGame from "./games/NinjaJumpGame";
 import ChessMasterGame from "./games/ChessMasterGame";
 import TetrisGame from "./games/tetris/TetrisGame";
 import MinesweeperGame from "./games/minesweeper/MinesweeperGame";
+import TowerDefense from "./games/tower-defense/TowerDefense";
 
 const queryClient = new QueryClient();
-
-import SpaceShooter from "./games/space-shooter/SpaceShooter";
-import TowerDefense from "./games/tower-defense/TowerDefense";
 
 const App = () => (
   <HelmetProvider>
@@ -59,7 +58,7 @@ const App = () => (
             <Route path="/game/tetris" element={<TetrisGame />} />
             <Route path="/game/minesweeper" element={<MinesweeperGame />} />
             
-            {/* Info Pages */}
+            {/* Info Pages Info */}
             <Route path="/developers" element={<Developers />} />
             <Route path="/affiliates" element={<Affiliates />} />
             <Route path="/contact" element={<Contact />} />
