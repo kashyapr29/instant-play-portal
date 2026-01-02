@@ -45,8 +45,8 @@ const createInitialBall = () => ({
   spin: 0,
   speed: 0,
   visible: false,
-  trajectory: [],
-  bounced: false,
+  trajectory: [] as { x: number; y: number }[],
+  bounceCount: 0,
 });
 
 export default function PingPongProGame() {

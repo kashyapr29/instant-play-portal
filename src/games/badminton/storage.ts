@@ -43,10 +43,22 @@ export const storage = {
     }
   },
 
+  loadProgress: (): GameProgress => {
+    return storage.get();
+  },
+
+  saveProgress: (progress: GameProgress): void => {
+    storage.set(progress);
+  },
+
   reset: (): GameProgress => {
     const progress = { ...DEFAULT_PROGRESS };
     storage.set(progress);
     return progress;
+  },
+
+  clearProgress: (): GameProgress => {
+    return storage.reset();
   },
 
   addCoins: (amount: number): GameProgress => {
