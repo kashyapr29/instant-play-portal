@@ -1095,7 +1095,7 @@ const TennisHeroGame: React.FC = () => {
                     setScreen('missionSelect');
                     tennisAudio.click();
                   } else {
-                    tennisAudio.error();
+                  tennisAudio.miss();
                   }
                 }}
                 disabled={!canPlayCountry}
@@ -1203,10 +1203,10 @@ const TennisHeroGame: React.FC = () => {
                     // Directly start the game without court select screen
                     setTimeout(() => startGame(), 100);
                   } else if (!isUnlocked) {
-                    tennisAudio.error();
+                    tennisAudio.miss();
                   } else if (heroLevel < mission.requiredPowerLevel) {
                     setShowUpgradePrompt(true);
-                    tennisAudio.error();
+                    tennisAudio.miss();
                   }
                 }}
                 disabled={!canPlay && !isCompleted}
