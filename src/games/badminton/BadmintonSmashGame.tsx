@@ -383,9 +383,9 @@ export default function BadmintonSmashGame() {
           }
 
           // AI opponent
-          const difficulty = getAIDifficulty(gs.currentCourt);
+          const aiDiff = getAIDifficulty(gs.currentCourt);
           const targetY = gs.shuttlecock.y - gs.opponent.height / 2;
-          const aiSpeed = 3 + difficulty * 0.5;
+          const aiSpeed = 3 + aiDiff.accuracy * 5;
           
           if (Math.abs(gs.opponent.y - targetY) > 5) {
             gs.opponent.y += (targetY - gs.opponent.y) * 0.08 * aiSpeed / 3;
@@ -399,10 +399,10 @@ export default function BadmintonSmashGame() {
             gs.shuttlecock.y > gs.opponent.y - 10 &&
             gs.shuttlecock.y < gs.opponent.y + gs.opponent.height + 10
           ) {
-            const hitChance = 0.7 + difficulty * 0.1;
+            const hitChance = 0.7 + aiDiff.accuracy * 0.3;
             if (Math.random() < hitChance) {
-              const speed = 5 + difficulty + Math.random() * 2;
-              const isSmash = Math.random() < 0.2 + difficulty * 0.1;
+              const speed = 5 + aiDiff.shuttleSpeed + Math.random() * 2;
+              const isSmash = Math.random() < 0.2 + aiDiff.aggression;
               
               gs.shuttlecock.vx = -speed * (isSmash ? 1.3 : 1);
               gs.shuttlecock.vy = (Math.random() - 0.5) * 4;
@@ -411,7 +411,7 @@ export default function BadmintonSmashGame() {
               badmintonAudio.playHit();
               addParticles(gs.shuttlecock.x, gs.shuttlecock.y, 'feather', 5);
               
-              gs.hitWindow = { start: Date.now(), end: Date.now() + 1200 - difficulty * 100 };
+              gs.hitWindow = { start: Date.now(), end: Date.now() + aiDiff.hitWindow };
             }
           }
         }
@@ -437,19 +437,20 @@ export default function BadmintonSmashGame() {
         renderCourt(ctx, court, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
-      renderPlayer(ctx, gs.player, true);
-      renderPlayer(ctx, gs.opponent, false);
+      renderPlayer(ctx, gs.player, false, false);
+      renderPlayer(ctx, gs.opponent, true, false);
       renderShuttlecock(ctx, gs.shuttlecock);
       
-      gs.powerUpsOnCourt.forEach(p => renderPowerUp(ctx, p));
+      gs.powerUpsOnCourt.forEach(p => renderPowerUp(ctx, p, Date.now()));
       renderParticles(ctx, particlesRef.current);
       
       if (lastHitQuality) {
-        renderHitIndicator(ctx, lastHitQuality, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        renderHitIndicator(ctx, lastHitQuality as any, 1, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
       }
       
       renderScore(ctx, gs.playerScore, gs.opponentScore, gs.serving, CANVAS_WIDTH);
-      renderTimingBar(ctx, gs.hitWindow, CANVAS_WIDTH, CANVAS_HEIGHT);
+      const timingProgress = gs.hitWindow ? (Date.now() - gs.hitWindow.start) / (gs.hitWindow.end - gs.hitWindow.start) : 0;
+      renderTimingBar(ctx, timingProgress, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       animationRef.current = requestAnimationFrame(gameLoop);
     };

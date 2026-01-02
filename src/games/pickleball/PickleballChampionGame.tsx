@@ -367,9 +367,9 @@ export default function PickleballChampionGame() {
           }
 
           // AI
-          const difficulty = getAIDifficulty(gs.currentCourt);
+          const aiDiff = getAIDifficulty(gs.currentCourt);
           const targetY = gs.ball.y - gs.opponent.height / 2;
-          const aiSpeed = 3.5 + difficulty * 0.45;
+          const aiSpeed = 3.5 + aiDiff.accuracy * 4;
           
           if (Math.abs(gs.opponent.y - targetY) > 5) {
             gs.opponent.y += (targetY - gs.opponent.y) * 0.075 * aiSpeed / 3.5;
@@ -384,9 +384,9 @@ export default function PickleballChampionGame() {
             gs.ball.y > gs.opponent.y - 10 &&
             gs.ball.y < gs.opponent.y + gs.opponent.height + 10
           ) {
-            const hitChance = 0.72 + difficulty * 0.09;
+            const hitChance = 0.72 + aiDiff.accuracy * 0.25;
             if (Math.random() < hitChance) {
-              const speed = 5 + difficulty * 0.8 + Math.random() * 1.5;
+              const speed = 5 + aiDiff.ballSpeed * 0.8 + Math.random() * 1.5;
               
               gs.ball.vx = -speed;
               gs.ball.vy = (Math.random() - 0.5) * 3.5;
@@ -395,7 +395,7 @@ export default function PickleballChampionGame() {
               pickleballAudio.playHit();
               addParticles(gs.ball.x, gs.ball.y, 'bounce', 5);
               
-              gs.hitWindow = { start: Date.now(), end: Date.now() + 1300 - difficulty * 100 };
+              gs.hitWindow = { start: Date.now(), end: Date.now() + aiDiff.hitWindow };
             }
           }
         }
