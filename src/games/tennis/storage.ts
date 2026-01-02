@@ -18,6 +18,9 @@ const DEFAULT_PROGRESS: GameProgress = {
   soundEnabled: true,
   vibrationEnabled: true,
   difficulty: 'normal',
+  // Career Mode
+  completedMissions: [],
+  heroUpgradeLevel: { 'alex': 1, 'emma': 1, 'james': 1, 'sophia': 1, 'diego': 1, 'yuki': 1 },
 };
 
 export const storage = {
@@ -124,5 +127,35 @@ export const storage = {
     progress.difficulty = difficulty;
     storage.set(progress);
     return progress;
+  },
+
+  completeMission: (missionId: string): GameProgress => {
+    const progress = storage.get();
+    if (!progress.completedMissions.includes(missionId)) {
+      progress.completedMissions.push(missionId);
+      storage.set(progress);
+    }
+    return progress;
+  },
+
+  upgradeHeroPower: (heroId: string, cost: number): boolean => {
+    const progress = storage.get();
+    if (progress.coins >= cost && (progress.heroUpgradeLevel[heroId] || 1) < 8) {
+      progress.coins -= cost;
+      progress.heroUpgradeLevel[heroId] = (progress.heroUpgradeLevel[heroId] || 1) + 1;
+      storage.set(progress);
+      return true;
+    }
+    return false;
+  },
+
+  getHeroPowerLevel: (heroId: string): number => {
+    const progress = storage.get();
+    return progress.heroUpgradeLevel[heroId] || 1;
+  },
+
+  getMissionProgress: () => {
+    const progress = storage.get();
+    return progress.completedMissions;
   },
 };

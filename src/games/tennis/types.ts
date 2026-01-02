@@ -73,6 +73,15 @@ export type PowerUpType =
   | 'speed_boost'
   | 'multi_hit';
 
+export interface HeroPowerUpgrade {
+  level: number; // 1-8
+  power: number; // Base power stat
+  speed: number; // Base speed stat
+  timing: number; // Base timing stat
+  spin: number; // Base spin stat
+  cost: number; // Coins to upgrade to next level
+}
+
 export interface GameProgress {
   coins: number;
   currentLevel: number;
@@ -87,6 +96,9 @@ export interface GameProgress {
   soundEnabled: boolean;
   vibrationEnabled: boolean;
   difficulty: 'easy' | 'normal' | 'hard';
+  // Career Mode - Missions
+  completedMissions: string[]; // Array of mission IDs completed
+  heroUpgradeLevel: { [heroId: string]: number }; // Current power level for each hero (1-8)
 }
 
 export interface MatchResult {
@@ -117,11 +129,18 @@ export interface GameState {
   hitWindow: { start: number; end: number } | null;
   lastHitQuality: 'perfect' | 'good' | 'early' | 'late' | 'miss' | null;
   isPaused: boolean;
+  slowMotionActive: boolean;
+  slowMotionStartTime: number;
+  slowMotionDuration: number; // 3 seconds
+  clickToHitActive: boolean;
+  targetClickPos: { x: number; y: number } | null;
 }
 
 export type GameScreen = 
   | 'menu'
   | 'heroSelect'
+  | 'countrySelect'
+  | 'missionSelect'
   | 'courtSelect'
   | 'modeSelect'
   | 'playing'

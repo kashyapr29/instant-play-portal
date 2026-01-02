@@ -1,13 +1,14 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import GameLayout from '@/components/GameLayout';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Home, Settings, Trophy, Users, User, ChevronLeft, Volume2, VolumeX, Zap, Star, Target } from 'lucide-react';
+import { Play, Pause, Home, Settings, Trophy, Users, User, ChevronLeft, ChevronRight, Volume2, VolumeX, Zap, Star, Target, Lock, Unlock } from 'lucide-react';
 import { GameState, GameScreen, GameMode, Player, Ball, PowerUp, Particle, MatchResult } from './types';
 import { COURTS, getCourtById, getAIDifficulty } from './courts';
 import { HEROES, getHeroById, getHeroesByGender } from './heroes';
 import { storage } from './storage';
 import { tennisAudio } from './audio';
 import { createPowerUp, POWER_UP_CONFIGS } from './powerups';
+import { CAREER_MISSIONS, getMissionById, getCountryById, getNextMission, getMissionProgress, CountryMission, MissionMatch } from './missions';
 import {
   renderCourt,
   renderPlayer,
@@ -35,6 +36,12 @@ const TennisHeroGame: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [isMuted, setIsMuted] = useState(!progress.soundEnabled);
+  
+  // Career Mode - Missions
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedMission, setSelectedMission] = useState<MissionMatch | null>(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [heroUpgradeLevel, setHeroUpgradeLevel] = useState(progress.heroUpgradeLevel[selectedHeroId] || 1);
   
   // Game state refs for animation loop
   const gameStateRef = useRef<GameState | null>(null);
@@ -106,6 +113,11 @@ const TennisHeroGame: React.FC = () => {
       hitWindow: null,
       lastHitQuality: null,
       isPaused: false,
+      slowMotionActive: false,
+      slowMotionStartTime: 0,
+      slowMotionDuration: 3000, // 3 seconds in milliseconds
+      clickToHitActive: false,
+      targetClickPos: null,
     };
     
     particlesRef.current = [];
@@ -135,7 +147,7 @@ const TennisHeroGame: React.FC = () => {
     tennisAudio.serve();
   };
 
-  const hitBall = (isPerfect: boolean) => {
+  const hitBall = useCallback((isPerfect: boolean, targetPos?: { x: number; y: number }) => {
     if (!gameStateRef.current) return;
     
     const gs = gameStateRef.current;
@@ -145,16 +157,39 @@ const TennisHeroGame: React.FC = () => {
     const powerMultiplier = isPerfect ? 1.6 : 1.1;
     const speedBoost = gs.activePowerUps.some(p => p.type === 'power_smash') ? 1.5 : 1;
     
-    gs.ball.vy = -Math.abs(gs.ball.vy) * powerMultiplier * speedBoost;
-    gs.ball.vx = (Math.random() - 0.5) * 5 * (hero.stats.spin / 100 + 0.5);
-    
-    // Auto aim power-up
-    if (gs.activePowerUps.some(p => p.type === 'auto_aim')) {
-      const targetX = gs.opponent.x + gs.opponent.width / 2;
-      gs.ball.vx = (targetX - gs.ball.x) * 0.02;
+    if (targetPos) {
+      // Click-to-hit: Calculate direction and velocity based on target
+      const ballX = gs.ball.x;
+      const ballY = gs.ball.y;
+      const dx = targetPos.x - ballX;
+      const dy = targetPos.y - ballY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance > 0) {
+        // Normalize and apply power
+        const baseSpeed = 6 + (hero.stats.power / 100) * 4;
+        const finalSpeed = baseSpeed * speedBoost * (isPerfect ? 1.3 : 1.0);
+        
+        gs.ball.vx = (dx / distance) * finalSpeed;
+        gs.ball.vy = (dy / distance) * finalSpeed;
+        
+        // Add spin based on hero stats
+        gs.ball.spin = (hero.stats.spin / 100) * (Math.random() - 0.5);
+      }
+    } else {
+      // Regular hit (original behavior)
+      gs.ball.vy = -Math.abs(gs.ball.vy) * powerMultiplier * speedBoost;
+      gs.ball.vx = (Math.random() - 0.5) * 5 * (hero.stats.spin / 100 + 0.5);
+      
+      // Auto aim power-up
+      if (gs.activePowerUps.some(p => p.type === 'auto_aim')) {
+        const targetX = gs.opponent.x + gs.opponent.width / 2;
+        gs.ball.vx = (targetX - gs.ball.x) * 0.02;
+      }
+      
+      gs.ball.spin = (hero.stats.spin / 100) * (Math.random() - 0.5);
     }
     
-    gs.ball.spin = (hero.stats.spin / 100) * (Math.random() - 0.5);
     gs.rallyCount++;
     
     if (isPerfect) {
@@ -166,7 +201,7 @@ const TennisHeroGame: React.FC = () => {
     
     isSwingingRef.current = true;
     setTimeout(() => { isSwingingRef.current = false; }, 150);
-  };
+  }, [selectedHeroId]);
 
   const createSparkParticles = (x: number, y: number) => {
     for (let i = 0; i < 12; i++) {
@@ -210,52 +245,96 @@ const TennisHeroGame: React.FC = () => {
     
     if (!ball.visible || ball.vy <= 0) return; // Ball must be moving towards player
     
-    matchStatsRef.current.attempts++;
-    
     // Check if ball is in hit zone
-    const hitZoneTop = player.y - 60;
+    const hitZoneTop = player.y - 80;
     const hitZoneBottom = player.y + 30;
     const playerCenterX = player.x + player.width / 2;
     const distanceToPlayer = Math.abs(ball.x - playerCenterX);
     const ballInYRange = ball.y > hitZoneTop && ball.y < hitZoneBottom;
-    const ballInXRange = distanceToPlayer < player.width * 2;
+    const ballInXRange = distanceToPlayer < player.width * 3;
     
-    if (ballInYRange && ballInXRange && ball.vy > 0) {
-      // Calculate timing quality based on Y position
-      const optimalY = player.y - 20;
-      const distanceFromOptimal = Math.abs(ball.y - optimalY);
-      const hero = getHeroById(selectedHeroId);
-      const timingBonus = hero.stats.timing / 100;
-      
-      let quality: 'perfect' | 'good' | 'early' | 'late' | 'miss';
-      
-      if (distanceFromOptimal < 20 + timingBonus * 15) {
-        quality = 'perfect';
-        hitBall(true);
-        matchStatsRef.current.hits++;
-      } else if (distanceFromOptimal < 40 + timingBonus * 20) {
-        quality = ball.y < optimalY ? 'early' : 'late';
-        hitBall(false);
-        matchStatsRef.current.hits++;
-      } else {
-        quality = 'miss';
-        tennisAudio.miss();
-      }
-      
-      hitIndicatorRef.current = { quality, alpha: 1, x: ball.x, y: ball.y - 40 };
-      gs.lastHitQuality = quality;
-      
-      // Track reaction time
-      if (lastBallHitTimeRef.current > 0) {
-        matchStatsRef.current.reactionTimes.push(now - lastBallHitTimeRef.current);
-      }
-      lastBallHitTimeRef.current = now;
-    } else {
-      // Swing and miss - ball not in range
-      isSwingingRef.current = true;
-      setTimeout(() => { isSwingingRef.current = false; }, 150);
+    // Activate slow motion when ball is approaching
+    if (ballInYRange && ballInXRange && ball.vy > 0 && !gs.slowMotionActive) {
+      gs.slowMotionActive = true;
+      gs.slowMotionStartTime = now;
+      gs.clickToHitActive = true;
+      tennisAudio.hit(); // Give feedback
+      return;
     }
-  }, [screen, isPaused, selectedHeroId]);
+  }, [screen, isPaused]);
+
+  const endMatch = useCallback((won: boolean) => {
+    const gs = gameStateRef.current;
+    if (!gs) return;
+    
+    const stats = matchStatsRef.current;
+    const accuracy = stats.attempts > 0 ? (stats.hits / stats.attempts) * 100 : 0;
+    const avgReaction = stats.reactionTimes.length > 0 
+      ? stats.reactionTimes.reduce((a, b) => a + b, 0) / stats.reactionTimes.length 
+      : 0;
+    
+    // Calculate mode-specific coin rewards
+    let coinsEarned = 0;
+    let modeBonus = '';
+    
+    if (gameMode === 'career') {
+      // Career: rewards based on mission
+      if (selectedMission) {
+        coinsEarned = won ? selectedMission.reward : 0;
+        modeBonus = won ? 'Mission Complete!' : 'Mission Lost';
+        // Store mission completion
+        if (won) {
+          storage.completeMission(selectedMission.id);
+        }
+      } else {
+        coinsEarned = won ? 100 + gs.currentCourt * 50 + stats.aces * 25 : 25;
+        modeBonus = won ? 'Level Complete!' : 'Level Lost';
+      }
+    } else if (gameMode === 'quickMatch') {
+      // Quick Play: instant rewards, no multiplier
+      coinsEarned = won ? 75 + gs.currentCourt * 30 : 15;
+      modeBonus = 'Quick Match Completed';
+    } else if (gameMode === 'practice') {
+      // Practice: no coin rewards, only experience
+      coinsEarned = 0;
+      modeBonus = 'Practice Session';
+    } else if (gameMode === 'challenge') {
+      // Challenge: 3x multiplier for wins, 0 for losses
+      coinsEarned = won ? (150 + gs.currentCourt * 75 + stats.aces * 50) : 0;
+      modeBonus = won ? '🔥 3x Challenge Bonus!' : 'Challenge Failed';
+    }
+    
+    const result: MatchResult = {
+      won,
+      playerScore: gs.playerScore[0],
+      opponentScore: gs.opponentScore[0],
+      aces: stats.aces,
+      accuracy: Math.round(accuracy),
+      avgReactionTime: Math.round(avgReaction),
+      coinsEarned,
+      powerUpsUsed: gs.activePowerUps.length,
+    };
+    
+    setMatchResult(result);
+    setScreen('matchEnd');
+    
+    // Update progress
+    let newProgress = storage.addCoins(coinsEarned);
+    newProgress = storage.recordMatch(won, stats.aces);
+    if (won && gameMode === 'career' && selectedMission) {
+      newProgress = storage.completeMission(selectedMission.id);
+    }
+    if (won && gameMode === 'career' && !selectedMission) {
+      newProgress = storage.completeLevel(selectedCourt, gs.playerScore[0] * 100);
+    }
+    setProgress(newProgress);
+    
+    if (won) {
+      tennisAudio.matchWon();
+    } else {
+      tennisAudio.matchLost();
+    }
+  }, [gameMode, selectedCourt, selectedMission]);
 
   const scorePoint = useCallback((scorer: 'player' | 'opponent') => {
     if (!gameStateRef.current) return;
@@ -322,75 +401,69 @@ const TennisHeroGame: React.FC = () => {
     // Serve again after delay
     gs.ball.visible = false;
     setTimeout(() => serveBall(), 1200);
-  }, []);
+  }, [endMatch]);
 
-  const endMatch = useCallback((won: boolean) => {
-    const gs = gameStateRef.current;
-    if (!gs) return;
-    
-    const stats = matchStatsRef.current;
-    const accuracy = stats.attempts > 0 ? (stats.hits / stats.attempts) * 100 : 0;
-    const avgReaction = stats.reactionTimes.length > 0 
-      ? stats.reactionTimes.reduce((a, b) => a + b, 0) / stats.reactionTimes.length 
-      : 0;
-    
-    const coinsEarned = won ? 100 + gs.currentCourt * 50 + stats.aces * 25 : 25;
-    
-    const result: MatchResult = {
-      won,
-      playerScore: gs.playerScore[0],
-      opponentScore: gs.opponentScore[0],
-      aces: stats.aces,
-      accuracy: Math.round(accuracy),
-      avgReactionTime: Math.round(avgReaction),
-      coinsEarned,
-      powerUpsUsed: gs.activePowerUps.length,
-    };
-    
-    setMatchResult(result);
-    setScreen('matchEnd');
-    
-    // Update progress
-    let newProgress = storage.addCoins(coinsEarned);
-    newProgress = storage.recordMatch(won, stats.aces);
-    if (won && gameMode === 'career') {
-      newProgress = storage.completeLevel(selectedCourt, gs.playerScore[0] * 100);
-    }
-    setProgress(newProgress);
-    
-    if (won) {
-      tennisAudio.matchWon();
-    } else {
-      tennisAudio.matchLost();
-    }
-  }, [gameMode, selectedCourt]);
+  // Track which ball the AI is trying to hit to avoid multiple hits
+  const aiHitAttemptRef = useRef<{ ballId: number; timestamp: number }>({ ballId: -1, timestamp: 0 });
 
   // AI opponent logic
   const updateAI = useCallback((gs: GameState, deltaTime: number) => {
-    const difficulty = getAIDifficulty(gs.currentCourt);
+    // Determine AI difficulty based on game mode
+    let difficulty = getAIDifficulty(gs.currentCourt);
+    
+    if (gameMode === 'practice') {
+      // Practice mode: always use easiest difficulty (Level 1)
+      difficulty = getAIDifficulty(1);
+    } else if (gameMode === 'challenge') {
+      // Challenge mode: always use hardest difficulty (Level 8)
+      difficulty = getAIDifficulty(8);
+    } else if (gameMode === 'career' && selectedMission) {
+      // Career mode: use mission difficulty
+      difficulty = getAIDifficulty(selectedMission.difficulty);
+    }
+    
     const opponent = gs.opponent;
     const ball = gs.ball;
     
     // AI moves towards predicted ball position
-    if (ball.visible) {
+    if (ball.visible && ball.vy < 0) {
+      // Ball is moving towards opponent
       let targetX: number;
       
-      if (ball.vy < 0) {
-        // Ball moving towards opponent - predict where it will be
-        const timeToReach = Math.abs((opponent.y + opponent.height - ball.y) / ball.vy);
-        targetX = ball.x + ball.vx * timeToReach * 0.8;
+      // Calculate time for ball to reach opponent's y position
+      const distanceY = opponent.y + opponent.height - ball.y;
+      
+      if (ball.vy !== 0 && distanceY > 0) {
+        // Predict where ball will be when it reaches opponent's court
+        const timeToReach = distanceY / Math.abs(ball.vy);
+        targetX = ball.x + ball.vx * timeToReach;
       } else {
-        // Ball moving away - return to center
-        targetX = CANVAS_WIDTH / 2;
+        // Default: move towards ball's current x position
+        targetX = ball.x;
       }
       
+      // Clamp target to court boundaries
       targetX = Math.max(60, Math.min(CANVAS_WIDTH - 60, targetX));
       
+      // Calculate movement towards target
       const diff = targetX - (opponent.x + opponent.width / 2);
-      const moveSpeed = (5 - difficulty.reactionTime / 150) * (deltaTime / 16);
       
-      if (Math.abs(diff) > 5) {
+      // Much slower AI movement - based on reaction time (lower level = slower)
+      const baseSpeed = 1.5 + (difficulty.reactionTime / 1000); // Much slower base speed
+      const moveSpeed = baseSpeed * (deltaTime / 16);
+      
+      // Move towards target gradually
+      if (Math.abs(diff) > 3) {
         opponent.x += Math.sign(diff) * Math.min(Math.abs(diff), moveSpeed);
+      }
+    } else if (ball.visible && ball.vy >= 0) {
+      // Ball moving away - return to center slowly
+      const centerX = CANVAS_WIDTH / 2;
+      const diff = centerX - (opponent.x + opponent.width / 2);
+      const returnSpeed = 1.5 * (deltaTime / 16);
+      
+      if (Math.abs(diff) > 3) {
+        opponent.x += Math.sign(diff) * Math.min(Math.abs(diff), returnSpeed);
       }
     }
     
@@ -399,21 +472,80 @@ const TennisHeroGame: React.FC = () => {
     
     // Check if ball reached opponent and AI should hit
     if (ball.visible && ball.vy < 0) {
-      const ballNearOpponent = ball.y < opponent.y + opponent.height + 40 && ball.y > opponent.y - 20;
-      const ballInRange = Math.abs(ball.x - (opponent.x + opponent.width / 2)) < opponent.width * 1.5;
+      // More realistic hit detection - much tighter zones
+      const ballNearOpponent = ball.y < opponent.y + opponent.height + 50 && ball.y > opponent.y - 40;
+      const opponentCenterX = opponent.x + opponent.width / 2;
+      const distanceFromCenter = Math.abs(ball.x - opponentCenterX);
+      const ballInXRange = distanceFromCenter < opponent.width * 0.7; // Much tighter! Only 70% of width
       
-      if (ballNearOpponent && ballInRange) {
-        // AI attempts to hit
-        if (Math.random() < difficulty.accuracy) {
-          ball.vy = Math.abs(ball.vy) * 1.1;
-          ball.vx = (Math.random() - 0.5) * 5;
+      if (ballNearOpponent && ballInXRange) {
+        // Calculate complexity factors that affect accuracy
+        const ballSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        const speedFactor = Math.min(1, ballSpeed / 8); // Faster balls are much harder to hit
+        
+        // Distance from optimal hit position (center of opponent)
+        const distanceFactor = Math.min(1, distanceFromCenter / (opponent.width * 0.35));
+        
+        // Base accuracy with MUCH stronger complexity penalties
+        let hitChance = difficulty.accuracy;
+        hitChance *= (1 - speedFactor * 0.6); // 60% penalty for fast balls (was 30%)
+        hitChance *= (1 - distanceFactor * 0.5); // 50% penalty for off-center balls (was 20%)
+        
+        // Additional penalty for extreme off-center hits
+        if (distanceFromCenter > opponent.width * 0.5) {
+          hitChance *= 0.4; // 60% penalty for very off-center
+        }
+        
+        // Only allow one hit attempt per ball to avoid double-hits
+        const now = performance.now();
+        const ballKey = Math.floor(ball.x) + Math.floor(ball.y) * 1000; // Simple ball identity
+        const isNewBall = aiHitAttemptRef.current.ballId !== ballKey || (now - aiHitAttemptRef.current.timestamp) > 200;
+        
+        if (isNewBall && Math.random() < hitChance) {
+          // Success! Opponent hits back
+          aiHitAttemptRef.current = { ballId: ballKey, timestamp: now };
+          
+          // Opponent hits back towards player with error margin
+          const targetY = gs.player.y;
+          const dx = (gs.player.x + gs.player.width / 2) - ball.x;
+          const dy = targetY - ball.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 0) {
+            // Send ball towards player with realistic error based on difficulty
+            const accuracy = difficulty.accuracy;
+            const errorMargin = (1 - accuracy) * 200; // Much larger error margin
+            
+            // More error in lower difficulties
+            const baseError = errorMargin * (1 + speedFactor * 0.8);
+            const errorX = (Math.random() - 0.5) * baseError;
+            const errorY = (Math.random() - 0.5) * baseError * 0.4;
+            
+            const targetX = (gs.player.x + gs.player.width / 2) + errorX;
+            const targetYAdjusted = targetY + errorY;
+            
+            const finalDx = targetX - ball.x;
+            const finalDy = targetYAdjusted - ball.y;
+            const finalDistance = Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+            
+            if (finalDistance > 0) {
+              // Return ball speed based on difficulty and incoming ball speed
+              const returnSpeed = 3 + (difficulty.ballSpeed / 2) * (0.6 + Math.random() * 0.4);
+              ball.vx = (finalDx / finalDistance) * returnSpeed;
+              ball.vy = (finalDy / finalDistance) * returnSpeed;
+            }
+          }
+          
           gs.rallyCount++;
           tennisAudio.hit();
           createDustParticles(ball.x, ball.y);
+        } else if (isNewBall) {
+          // Opponent missed!
+          aiHitAttemptRef.current = { ballId: ballKey, timestamp: now };
         }
       }
     }
-  }, []);
+  }, [gameMode, selectedMission]);
 
   // Main game loop
   const gameLoop = useCallback((timestamp: number) => {
@@ -431,6 +563,28 @@ const TennisHeroGame: React.FC = () => {
     if (!isPaused && screen === 'playing') {
       gs.matchTime += deltaTime;
       
+      // Challenge mode: check for time limit (5 minutes = 300000ms)
+      if (gameMode === 'challenge' && gs.matchTime > 300000) {
+        // Time's up! End match - opponent wins
+        endMatch(false);
+        return;
+      }
+      
+      // Update slow motion timer
+      if (gs.slowMotionActive) {
+        const elapsed = performance.now() - gs.slowMotionStartTime;
+        if (elapsed >= gs.slowMotionDuration) {
+          // Slow motion expired, end the mechanic
+          gs.slowMotionActive = false;
+          gs.clickToHitActive = false;
+          gs.targetClickPos = null;
+          // Auto-hit towards center if no click was made
+          if (gs.ball.visible) {
+            hitBall(false, { x: CANVAS_WIDTH / 2, y: gs.opponent.y });
+          }
+        }
+      }
+      
       // Update player position towards target
       const speedBoost = gs.activePowerUps.some(p => p.type === 'speed_boost') ? 1.8 : 1;
       const playerDiff = playerTargetXRef.current - (gs.player.x + gs.player.width / 2);
@@ -439,9 +593,17 @@ const TennisHeroGame: React.FC = () => {
       
       // Update ball physics
       if (gs.ball.visible) {
-        const slowMotion = gs.activePowerUps.some(p => p.type === 'slow_motion') ? 0.5 : 1;
-        gs.ball.x += gs.ball.vx * slowMotion;
-        gs.ball.y += gs.ball.vy * slowMotion;
+        // Combine slow motion from power-ups and the new mechanic
+        let slowMotionMultiplier = 1;
+        if (gs.activePowerUps.some(p => p.type === 'slow_motion')) {
+          slowMotionMultiplier *= 0.5;
+        }
+        if (gs.slowMotionActive && gs.clickToHitActive) {
+          slowMotionMultiplier *= 0.3; // 70% slower during click-to-hit mechanic
+        }
+        
+        gs.ball.x += gs.ball.vx * slowMotionMultiplier;
+        gs.ball.y += gs.ball.vy * slowMotionMultiplier;
         
         // Apply spin
         gs.ball.vx += gs.ball.spin * 0.05;
@@ -466,8 +628,10 @@ const TennisHeroGame: React.FC = () => {
         }
       }
       
-      // Update AI
-      updateAI(gs, deltaTime);
+      // Update AI (disabled during slow motion)
+      if (!gs.slowMotionActive) {
+        updateAI(gs, deltaTime);
+      }
       
       // Update particles
       particlesRef.current = particlesRef.current.filter(p => {
@@ -570,7 +734,7 @@ const TennisHeroGame: React.FC = () => {
     }
     
     // Timing hint when ball approaching player
-    if (gs.ball.visible && gs.ball.vy > 0 && gs.ball.y > CANVAS_HEIGHT * 0.45 && gs.ball.y < CANVAS_HEIGHT * 0.75) {
+    if (!gs.slowMotionActive && gs.ball.visible && gs.ball.vy > 0 && gs.ball.y > CANVAS_HEIGHT * 0.45 && gs.ball.y < CANVAS_HEIGHT * 0.75) {
       ctx.font = 'bold 18px Arial';
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
@@ -578,6 +742,71 @@ const TennisHeroGame: React.FC = () => {
       ctx.lineWidth = 3;
       ctx.strokeText('TAP TO HIT!', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
       ctx.fillText('TAP TO HIT!', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+    }
+    
+    // Slow motion timer on canvas
+    if (gs.slowMotionActive && gs.clickToHitActive) {
+      const remaining = Math.max(0, (gs.slowMotionStartTime + gs.slowMotionDuration - timestamp) / 1000);
+      
+      // Draw semi-transparent overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      
+      // Draw timer
+      ctx.font = 'bold 48px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(remaining.toFixed(1) + 's', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+      ctx.fillText(remaining.toFixed(1) + 's', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+      
+      // Draw instruction
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeText('Click to hit the ball!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
+      ctx.fillText('Click to hit the ball!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
+      
+      // Draw target reticle if we have a target position
+      if (gs.targetClickPos) {
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(gs.targetClickPos.x, gs.targetClickPos.y, 20, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw crosshairs
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gs.targetClickPos.x - 15, gs.targetClickPos.y);
+        ctx.lineTo(gs.targetClickPos.x + 15, gs.targetClickPos.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(gs.targetClickPos.x, gs.targetClickPos.y - 15);
+        ctx.lineTo(gs.targetClickPos.x, gs.targetClickPos.y + 15);
+        ctx.stroke();
+      }
+    }
+    
+    // Challenge Mode: Time remaining
+    if (gameMode === 'challenge') {
+      const timeRemaining = Math.max(0, 300 - Math.floor(gs.matchTime / 1000)); // 5 minutes = 300 seconds
+      const minutes = Math.floor(timeRemaining / 60);
+      const seconds = timeRemaining % 60;
+      
+      const isWarning = timeRemaining <= 30; // Warning when 30 seconds or less
+      
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = isWarning ? 'rgba(255, 100, 100, 0.9)' : 'rgba(255, 200, 0, 0.9)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.lineWidth = 3;
+      const timeText = `⏱️ ${minutes}:${seconds.toString().padStart(2, '0')}`;
+      ctx.strokeText(timeText, CANVAS_WIDTH / 2, 45);
+      ctx.fillText(timeText, CANVAS_WIDTH / 2, 45);
     }
     
     // Rally counter
@@ -589,7 +818,7 @@ const TennisHeroGame: React.FC = () => {
     }
     
     animationRef.current = requestAnimationFrame(gameLoop);
-  }, [isPaused, screen, selectedHeroId, scorePoint, updateAI]);
+  }, [isPaused, screen, selectedHeroId, scorePoint, updateAI, hitBall]);
 
   // Handle player movement (touch/mouse)
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -602,8 +831,52 @@ const TennisHeroGame: React.FC = () => {
     const scaleX = canvas.width / rect.width;
     const x = (e.clientX - rect.left) * scaleX;
     
-    playerTargetXRef.current = Math.max(60, Math.min(CANVAS_WIDTH - 60, x));
+    // If in slow motion, track cursor for targeting
+    const gs = gameStateRef.current;
+    if (gs.slowMotionActive && gs.clickToHitActive) {
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      gs.targetClickPos = { x, y };
+    } else {
+      // Normal movement: move player towards cursor
+      playerTargetXRef.current = Math.max(60, Math.min(CANVAS_WIDTH - 60, x));
+    }
   }, [screen, isPaused]);
+
+  // Handle canvas click for slow motion hitting
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.PointerEvent<HTMLCanvasElement>) => {
+    if (!gameStateRef.current || screen !== 'playing' || isPaused) return;
+    
+    const gs = gameStateRef.current;
+    if (!gs.slowMotionActive || !gs.clickToHitActive) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    // Hit the ball towards the clicked position
+    matchStatsRef.current.attempts++;
+    matchStatsRef.current.hits++;
+    
+    const isPerfect = Math.random() < 0.4; // 40% chance of perfect hit
+    hitBall(isPerfect, { x, y });
+    
+    // End slow motion
+    gs.slowMotionActive = false;
+    gs.clickToHitActive = false;
+    gs.targetClickPos = null;
+    
+    hitIndicatorRef.current = { 
+      quality: isPerfect ? 'perfect' : 'good', 
+      alpha: 1, 
+      x: gs.ball.x, 
+      y: gs.ball.y - 40 
+    };
+  }, [screen, isPaused, hitBall]);
 
   // Start/stop game loop
   useEffect(() => {
@@ -640,6 +913,52 @@ const TennisHeroGame: React.FC = () => {
     setIsPaused(false);
     setMatchResult(null);
   }, [initGame]);
+
+  const getNextMissionToPlay = (): MissionMatch | null => {
+    if (!selectedMission) return null;
+    
+    // Find current country and mission index
+    let currentCountryIndex = -1;
+    let currentMissionIndex = -1;
+    
+    for (let i = 0; i < CAREER_MISSIONS.length; i++) {
+      const missionIndex = CAREER_MISSIONS[i].matches.findIndex(m => m.id === selectedMission.id);
+      if (missionIndex !== -1) {
+        currentCountryIndex = i;
+        currentMissionIndex = missionIndex;
+        break;
+      }
+    }
+    
+    if (currentCountryIndex === -1) return null;
+    
+    const currentCountry = CAREER_MISSIONS[currentCountryIndex];
+    
+    // Check if there are more missions in the current country
+    if (currentMissionIndex < currentCountry.matches.length - 1) {
+      const nextMission = currentCountry.matches[currentMissionIndex + 1];
+      // Check if mission is unlocked (previous mission completed or it's first mission)
+      const isPreviousCompleted = currentMissionIndex === 0 || progress.completedMissions.includes(currentCountry.matches[currentMissionIndex].id);
+      if (isPreviousCompleted && heroUpgradeLevel >= nextMission.requiredPowerLevel) {
+        return nextMission;
+      }
+    }
+    
+    // If current country is complete, check next country
+    if (currentCountryIndex < CAREER_MISSIONS.length - 1) {
+      const nextCountry = CAREER_MISSIONS[currentCountryIndex + 1];
+      // Check if next country can be unlocked (current country complete)
+      const isCurrentCountryComplete = currentCountry.matches.every(m => progress.completedMissions.includes(m.id));
+      if (isCurrentCountryComplete) {
+        const firstMissionNextCountry = nextCountry.matches[0];
+        if (heroUpgradeLevel >= firstMissionNextCountry.requiredPowerLevel) {
+          return firstMissionNextCountry;
+        }
+      }
+    }
+    
+    return null;
+  };
 
   const toggleSound = () => {
     const newProgress = storage.toggleSound();
@@ -721,8 +1040,247 @@ const TennisHeroGame: React.FC = () => {
     </div>
   );
 
+  const renderCountrySelect = () => {
+    const { completedCount, totalMissions, percentage } = getMissionProgress(progress.completedMissions);
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 overflow-auto">
+        <Button
+          onClick={() => { setScreen('modeSelect'); tennisAudio.click(); }}
+          variant="ghost"
+          className="absolute top-3 left-3 text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </Button>
+
+        <h2 className="text-2xl font-bold text-white mb-1 mt-6">Career Missions</h2>
+        <p className="text-white/70 text-xs text-center mb-4">Travel across the world to become the greatest</p>
+
+        {/* Overall Progress */}
+        <div className="w-full max-w-md mb-6 px-2">
+          <div className="bg-white/10 rounded-lg p-3">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-white/80 text-sm font-semibold">Global Progress</span>
+              <span className="text-white font-bold">{completedCount}/{totalMissions}</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-500"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <p className="text-white/60 text-xs mt-2">{percentage}% Complete</p>
+          </div>
+        </div>
+
+        {/* Countries Grid */}
+        <div className="w-full max-w-md space-y-3 px-2">
+          {CAREER_MISSIONS.map((country, index) => {
+            const countryMissions = country.matches;
+            const completedInCountry = countryMissions.filter(m => progress.completedMissions.includes(m.id)).length;
+            const isCountryComplete = completedInCountry === countryMissions.length;
+            
+            // Country is accessible if: it's the first country, or if it has started, or if the previous country is complete
+            const previousCountryComplete = index > 0 ? 
+              CAREER_MISSIONS[index - 1].matches.every(m => progress.completedMissions.includes(m.id)) : 
+              true;
+            const canPlayCountry = completedInCountry > 0 || country.id === CAREER_MISSIONS[0].id || previousCountryComplete;
+            
+            return (
+              <button
+                key={country.id}
+                onClick={() => {
+                  if (canPlayCountry) {
+                    setSelectedCountry(country.id);
+                    setScreen('missionSelect');
+                    tennisAudio.click();
+                  } else {
+                    tennisAudio.error();
+                  }
+                }}
+                disabled={!canPlayCountry}
+                className={`w-full p-4 rounded-2xl text-left transition-all ${
+                  canPlayCountry
+                    ? 'shadow-lg transform hover:scale-105 active:scale-95'
+                    : 'opacity-60 grayscale'
+                }`}
+                style={{
+                  background: canPlayCountry
+                    ? `linear-gradient(135deg, rgba(100,150,200,0.8), rgba(80,120,180,0.8))`
+                    : 'linear-gradient(135deg, rgba(60,60,60,0.6), rgba(40,40,40,0.6))',
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-3xl">{country.flag}</span>
+                      <div className="flex-1">
+                        <div className="font-bold text-white">{country.name}</div>
+                        <div className="text-[10px] text-white/70">{country.description}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex-1 bg-white/20 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-yellow-300 to-orange-400 h-full transition-all"
+                          style={{ width: `${(completedInCountry / countryMissions.length) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-white/80 font-semibold">{completedInCountry}/5</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {isCountryComplete && <Star className="h-5 w-5 text-yellow-300 fill-yellow-300" />}
+                    {!canPlayCountry && <Lock className="h-5 w-5 text-white/40" />}
+                    {canPlayCountry && !isCountryComplete && <Unlock className="h-5 w-5 text-green-400" />}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMissionSelect = () => {
+    const country = getCountryById(selectedCountry || '');
+    if (!country) return null;
+
+    const heroLevel = progress.heroUpgradeLevel[selectedHeroId] || 1;
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 overflow-auto">
+        <Button
+          onClick={() => { setScreen('countrySelect'); tennisAudio.click(); }}
+          variant="ghost"
+          className="absolute top-3 left-3 text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </Button>
+
+        <div className="mt-6 text-center">
+          <div className="text-5xl mb-2">{country.flag}</div>
+          <h2 className="text-2xl font-bold text-white mb-1">{country.name}</h2>
+          <p className="text-white/60 text-xs mb-4">Complete all 5 matches to master this country</p>
+        </div>
+
+        {/* Hero Power Level Info */}
+        <div className="w-full max-w-md mb-6 px-2">
+          <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-blue-300 text-sm font-semibold flex items-center gap-2">
+                <Zap className="h-4 w-4" /> Hero Power Level
+              </span>
+              <span className="text-white font-bold text-lg">{heroLevel}/8</span>
+            </div>
+            <div className="w-full bg-blue-900/50 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-400 to-cyan-400 h-full transition-all"
+                style={{ width: `${(heroLevel / 8) * 100}%` }}
+              />
+            </div>
+            <p className="text-blue-300/80 text-xs mt-2">Upgrade your hero to unlock harder missions</p>
+          </div>
+        </div>
+
+        {/* Mission List */}
+        <div className="w-full max-w-md space-y-2.5 px-2">
+          {country.matches.map((mission, index) => {
+            const isCompleted = progress.completedMissions.includes(mission.id);
+            const isPreviousCompleted = index === 0 || progress.completedMissions.includes(country.matches[index - 1].id);
+            const isUnlocked = isPreviousCompleted;
+            const canPlay = isUnlocked && heroLevel >= mission.requiredPowerLevel;
+            
+            return (
+              <button
+                key={mission.id}
+                onClick={() => {
+                  if (canPlay || isCompleted) {
+                    setSelectedMission(mission);
+                    setSelectedCourt(mission.difficulty); // Use mission difficulty as court level
+                    tennisAudio.click();
+                    // Directly start the game without court select screen
+                    setTimeout(() => startGame(), 100);
+                  } else if (!isUnlocked) {
+                    tennisAudio.error();
+                  } else if (heroLevel < mission.requiredPowerLevel) {
+                    setShowUpgradePrompt(true);
+                    tennisAudio.error();
+                  }
+                }}
+                disabled={!canPlay && !isCompleted}
+                className={`w-full p-3 rounded-xl text-left transition-all ${
+                  (canPlay || isCompleted) && 'hover:scale-102 active:scale-98'
+                }`}
+                style={{
+                  background: isCompleted
+                    ? 'linear-gradient(135deg, rgba(34,197,94,0.3), rgba(22,163,74,0.3))'
+                    : canPlay
+                    ? 'linear-gradient(135deg, rgba(59,130,246,0.3), rgba(37,99,235,0.3))'
+                    : 'linear-gradient(135deg, rgba(60,60,60,0.4), rgba(40,40,40,0.4))',
+                  opacity: (canPlay || isCompleted) ? 1 : 0.6,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold text-white">Match {mission.matchNumber}</div>
+                      <span className="text-xs bg-white/10 px-2 py-0.5 rounded">Lvl {mission.difficulty}</span>
+                      {mission.requiredPowerLevel > 1 && (
+                        <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded flex items-center gap-1">
+                          <Zap className="h-3 w-3" /> {mission.requiredPowerLevel}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/70 mt-1">{mission.opponentName}</p>
+                    <p className="text-[11px] text-white/50">{mission.description}</p>
+                  </div>
+                  <div className="text-right">
+                    {isCompleted ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <Star className="h-5 w-5 text-yellow-400 fill-yellow-400" />
+                        <span className="text-xs text-yellow-400 font-bold">{mission.reward}</span>
+                      </div>
+                    ) : !isUnlocked ? (
+                      <Lock className="h-5 w-5 text-white/40" />
+                    ) : heroLevel < mission.requiredPowerLevel ? (
+                      <div className="text-xs text-orange-400 font-bold">Upgrade</div>
+                    ) : (
+                      <div className="text-right">
+                        <Unlock className="h-5 w-5 text-green-400 mx-auto" />
+                        <span className="text-xs text-yellow-300 font-bold mt-1">+{mission.reward}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Upgrade Prompt */}
+        {showUpgradePrompt && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl">
+            <div className="bg-slate-800 border border-white/10 rounded-xl p-6 max-w-xs mx-4 text-center">
+              <div className="text-4xl mb-3">⚡</div>
+              <h3 className="text-white font-bold mb-2">Power Upgrade Required</h3>
+              <p className="text-white/70 text-sm mb-4">Your hero needs to be upgraded to Power Level {heroLevel + 1} to unlock this mission</p>
+              <Button
+                onClick={() => setShowUpgradePrompt(false)}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                Got It
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderModeSelect = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-700 p-4">
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-700 p-4 overflow-auto">
       <Button
         onClick={() => { setScreen('menu'); tennisAudio.click(); }}
         variant="ghost"
@@ -731,95 +1289,225 @@ const TennisHeroGame: React.FC = () => {
         <ChevronLeft className="h-6 w-6" />
       </Button>
       
-      <h2 className="text-2xl font-bold text-white mb-6">Select Mode</h2>
+      <h2 className="text-2xl font-bold text-white mb-2 mt-6">Select Mode</h2>
+      <p className="text-white/70 text-xs text-center mb-6 max-w-xs">Each mode offers a unique experience</p>
       
-      <div className="grid grid-cols-2 gap-3 w-full max-w-sm px-2">
-        {[
-          { mode: 'career' as GameMode, name: 'Career', icon: '🏆', desc: 'Climb the ranks', color: 'from-amber-500 to-orange-600' },
-          { mode: 'quickMatch' as GameMode, name: 'Quick Play', icon: '⚡', desc: 'Jump right in', color: 'from-cyan-500 to-blue-600' },
-          { mode: 'practice' as GameMode, name: 'Practice', icon: '🎯', desc: 'Hone your skills', color: 'from-emerald-500 to-green-600' },
-          { mode: 'challenge' as GameMode, name: 'Challenge', icon: '🔥', desc: 'Daily missions', color: 'from-rose-500 to-red-600' },
-        ].map(m => (
-          <button
-            key={m.mode}
-            onClick={() => {
-              setGameMode(m.mode);
-              setScreen('courtSelect');
-              tennisAudio.click();
-            }}
-            className={`p-4 rounded-2xl bg-gradient-to-br ${m.color} text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all border border-white/20`}
-          >
-            <div className="text-3xl mb-2">{m.icon}</div>
-            <div className="font-bold text-sm">{m.name}</div>
-            <div className="text-[10px] opacity-80">{m.desc}</div>
-          </button>
-        ))}
+      <div className="w-full max-w-md space-y-3 px-2">
+        {/* Career Mode */}
+        <button
+          onClick={() => {
+            setGameMode('career');
+            setSelectedCountry(null);
+            setSelectedMission(null);
+            setScreen('countrySelect');
+            tennisAudio.click();
+          }}
+          className="w-full p-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all border border-white/20 text-left"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl">🏆</span>
+                <div className="font-bold text-lg">Career Mode</div>
+              </div>
+              <p className="text-[11px] opacity-90 mb-2">Progress through 8 courts • Unlock achievements • Build your legacy</p>
+              <div className="text-[10px] opacity-75">
+                <div>✓ 8 Progressive Courts</div>
+                <div>✓ Ranked Opponents</div>
+                <div>✓ Save Your Progress</div>
+              </div>
+            </div>
+            <div className="text-3xl">→</div>
+          </div>
+        </button>
+
+        {/* Quick Play Mode */}
+        <button
+          onClick={() => {
+            setGameMode('quickMatch');
+            setScreen('courtSelect');
+            tennisAudio.click();
+          }}
+          className="w-full p-4 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all border border-white/20 text-left"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl">⚡</span>
+                <div className="font-bold text-lg">Quick Play</div>
+              </div>
+              <p className="text-[11px] opacity-90 mb-2">Play any court instantly • Random difficulty • No progression</p>
+              <div className="text-[10px] opacity-75">
+                <div>✓ Play Any Court</div>
+                <div>✓ Quick Matches</div>
+                <div>✓ Earn Coins Fast</div>
+              </div>
+            </div>
+            <div className="text-3xl">→</div>
+          </div>
+        </button>
+
+        {/* Practice Mode */}
+        <button
+          onClick={() => {
+            setGameMode('practice');
+            setScreen('courtSelect');
+            tennisAudio.click();
+          }}
+          className="w-full p-4 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all border border-white/20 text-left"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl">🎯</span>
+                <div className="font-bold text-lg">Practice Mode</div>
+              </div>
+              <p className="text-[11px] opacity-90 mb-2">Master your skills • Weaker AI • No time limit • No pressure</p>
+              <div className="text-[10px] opacity-75">
+                <div>✓ All Courts Unlocked</div>
+                <div>✓ Easy AI (Always)</div>
+                <div>✓ No Coin Penalty</div>
+              </div>
+            </div>
+            <div className="text-3xl">→</div>
+          </div>
+        </button>
+
+        {/* Challenge Mode */}
+        <button
+          onClick={() => {
+            setGameMode('challenge');
+            setScreen('courtSelect');
+            tennisAudio.click();
+          }}
+          className="w-full p-4 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all border border-white/20 text-left"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl">🔥</span>
+                <div className="font-bold text-lg">Challenge Mode</div>
+              </div>
+              <p className="text-[11px] opacity-90 mb-2">Extreme difficulty • Time based • Win big rewards • Lose big coins</p>
+              <div className="text-[10px] opacity-75">
+                <div>✓ Hardest AI</div>
+                <div>✓ Time Limit (5 min)</div>
+                <div>✓ 3x Coin Rewards</div>
+              </div>
+            </div>
+            <div className="text-3xl">→</div>
+          </div>
+        </button>
       </div>
     </div>
   );
 
-  const renderCourtSelect = () => (
-    <div className="absolute inset-0 flex flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white overflow-hidden">
-      <div className="flex items-center p-3 border-b border-white/10">
-        <Button
-          onClick={() => { setScreen('modeSelect'); tennisAudio.click(); }}
-          variant="ghost"
-          className="text-white/80 hover:text-white hover:bg-white/10 p-2"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-8">Select Court</h2>
-      </div>
-      
-      <div className="flex-1 overflow-auto p-3 space-y-2.5">
-        {COURTS.map(court => {
-          const unlocked = court.unlockLevel <= progress.highestLevel;
-          const completed = progress.completedLevels.includes(court.id);
-          
-          return (
-            <button
-              key={court.id}
-              onClick={() => {
-                if (unlocked) {
-                  setSelectedCourt(court.id);
-                  startGame();
-                  tennisAudio.click();
-                }
-              }}
-              disabled={!unlocked}
-              className={`relative w-full p-3.5 rounded-xl text-left transition-all ${
-                unlocked 
-                  ? 'shadow-lg transform hover:scale-[1.02] active:scale-[0.98]'
-                  : 'opacity-40 grayscale'
-              }`}
-              style={unlocked ? { 
-                background: `linear-gradient(135deg, ${court.bgColors[0]}, ${court.bgColors[1] || court.bgColors[0]})` 
-              } : { background: '#374151' }}
-            >
-              <div className="flex justify-between items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-base truncate">{court.name}</div>
-                  <div className="text-xs opacity-80 truncate">{court.description}</div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[10px] px-2 py-0.5 bg-black/20 rounded-full uppercase font-medium">
-                      {court.surface}
-                    </span>
-                    {completed && (
-                      <span className="text-[10px] px-2 py-0.5 bg-yellow-500/30 rounded-full flex items-center gap-1">
-                        <Star className="h-3 w-3" /> Done
+  const renderCourtSelect = () => {
+    // Filter courts based on mode
+    const getAvailableCourts = () => {
+      if (gameMode === 'practice') {
+        return COURTS; // All courts in practice
+      } else if (gameMode === 'quickMatch') {
+        return COURTS; // All courts in quick play
+      } else if (gameMode === 'challenge') {
+        return COURTS.slice(3); // Only courts 4+ for challenge
+      } else {
+        // Career: only unlocked courts
+        return COURTS.filter(c => c.unlockLevel <= progress.highestLevel);
+      }
+    };
+
+    const availableCourts = getAvailableCourts();
+    const modeInfo = {
+      career: { title: '📈 Career - Select Your Next Court', color: 'from-amber-500 to-orange-600' },
+      quickMatch: { title: '⚡ Quick Play - Choose Any Court', color: 'from-cyan-500 to-blue-600' },
+      practice: { title: '🎯 Practice - Perfect Your Skills', color: 'from-emerald-500 to-green-600' },
+      challenge: { title: '🔥 Challenge - Extreme Mode', color: 'from-rose-500 to-red-600' },
+    };
+    
+    const info = modeInfo[gameMode];
+
+    return (
+      <div className="absolute inset-0 flex flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white overflow-hidden">
+        <div className="flex items-center p-3 border-b border-white/10">
+          <Button
+            onClick={() => { setScreen('modeSelect'); tennisAudio.click(); }}
+            variant="ghost"
+            className="text-white/80 hover:text-white hover:bg-white/10 p-2"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <h2 className="text-lg font-bold flex-1 text-center pr-8">{info.title}</h2>
+        </div>
+
+        {/* Mode Info Bar */}
+        <div className={`bg-gradient-to-r ${info.color} px-4 py-3 text-white/90 text-xs`}>
+          {gameMode === 'career' && <div>🎓 Progress through courts to unlock the next level. Your best effort counts!</div>}
+          {gameMode === 'quickMatch' && <div>⚡ Play without restrictions. Earn coins instantly with no progression tracking.</div>}
+          {gameMode === 'practice' && <div>🎯 Train freely with weak AI. Perfect for learning shot placement and timing!</div>}
+          {gameMode === 'challenge' && <div>🔥 5-minute match timer! Win for 3x coins. Lose and no rewards. High stakes!</div>}
+        </div>
+        
+        <div className="flex-1 overflow-auto p-3 space-y-2.5">
+          {availableCourts.map(court => {
+            const unlocked = gameMode === 'practice' || gameMode === 'quickMatch' || court.unlockLevel <= progress.highestLevel;
+            const completed = progress.completedLevels.includes(court.id);
+            
+            return (
+              <button
+                key={court.id}
+                onClick={() => {
+                  if (unlocked) {
+                    setSelectedCourt(court.id);
+                    startGame();
+                    tennisAudio.click();
+                  }
+                }}
+                disabled={!unlocked}
+                className={`relative w-full p-3.5 rounded-xl text-left transition-all ${
+                  unlocked 
+                    ? 'shadow-lg transform hover:scale-[1.02] active:scale-[0.98]'
+                    : 'opacity-40 grayscale'
+                }`}
+                style={unlocked ? { 
+                  background: `linear-gradient(135deg, ${court.bgColors[0]}, ${court.bgColors[1] || court.bgColors[0]})` 
+                } : { background: '#374151' }}
+              >
+                <div className="flex justify-between items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-base truncate">{court.name}</div>
+                    <div className="text-xs opacity-80 truncate">{court.description}</div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] px-2 py-0.5 bg-black/20 rounded-full uppercase font-medium">
+                        {court.surface}
                       </span>
-                    )}
+                      {completed && (
+                        <span className="text-[10px] px-2 py-0.5 bg-yellow-500/30 rounded-full flex items-center gap-1">
+                          <Star className="h-3 w-3" /> Done
+                        </span>
+                      )}
+                      {gameMode === 'practice' && (
+                        <span className="text-[10px] px-2 py-0.5 bg-green-500/30 rounded-full">
+                          Easy AI
+                        </span>
+                      )}
+                      {gameMode === 'challenge' && (
+                        <span className="text-[10px] px-2 py-0.5 bg-red-500/30 rounded-full">
+                          Hard AI
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {!unlocked && <div className="text-2xl">🔒</div>}
+                  {unlocked && <ChevronLeft className="h-5 w-5 rotate-180 opacity-60" />}
                 </div>
-                {!unlocked && <div className="text-2xl">🔒</div>}
-                {unlocked && <ChevronLeft className="h-5 w-5 rotate-180 opacity-60" />}
-              </div>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderHeroSelect = () => {
     const heroes = getHeroesByGender(genderFilter);
@@ -998,55 +1686,129 @@ const TennisHeroGame: React.FC = () => {
     </div>
   );
 
-  const renderMatchEnd = () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 to-black text-white p-4">
-      <div className="text-center mb-5">
-        <div className="text-7xl mb-3">{matchResult?.won ? '🏆' : '😢'}</div>
-        <h2 className="text-3xl font-black mb-1">
-          {matchResult?.won ? 'VICTORY!' : 'DEFEAT'}
-        </h2>
-        <p className="text-3xl font-bold text-yellow-400">
-          {matchResult?.playerScore} - {matchResult?.opponentScore}
-        </p>
-      </div>
-      
-      <div className="bg-white/10 rounded-2xl p-4 w-full max-w-xs mb-5 border border-white/10">
-        <div className="grid grid-cols-2 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold text-yellow-400">{matchResult?.aces}</div>
-            <div className="text-[10px] opacity-60 uppercase">Aces</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-green-400">{matchResult?.accuracy}%</div>
-            <div className="text-[10px] opacity-60 uppercase">Accuracy</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-cyan-400">{matchResult?.avgReactionTime}ms</div>
-            <div className="text-[10px] opacity-60 uppercase">Reaction</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-amber-300">+{matchResult?.coinsEarned}</div>
-            <div className="text-[10px] opacity-60 uppercase">Coins 💰</div>
+  const renderMatchEnd = () => {
+    const nextUpgradeCost = 100 + (heroUpgradeLevel * 50); // Cost increases per level
+    const canUpgrade = progress.coins >= nextUpgradeCost && heroUpgradeLevel < 8;
+    const nextMissionToPlay = matchResult?.won ? getNextMissionToPlay() : null;
+    
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 to-black text-white p-4 overflow-auto">
+        <div className="text-center mb-5 mt-6">
+          <div className="text-7xl mb-3">{matchResult?.won ? '🏆' : '😢'}</div>
+          <h2 className="text-3xl font-black mb-1">
+            {matchResult?.won ? 'VICTORY!' : 'DEFEAT'}
+          </h2>
+          <p className="text-3xl font-bold text-yellow-400">
+            {matchResult?.playerScore} - {matchResult?.opponentScore}
+          </p>
+        </div>
+        
+        <div className="bg-white/10 rounded-2xl p-4 w-full max-w-xs mb-5 border border-white/10">
+          <div className="grid grid-cols-2 gap-4 text-center">
+            <div>
+              <div className="text-2xl font-bold text-yellow-400">{matchResult?.aces}</div>
+              <div className="text-[10px] opacity-60 uppercase">Aces</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-400">{matchResult?.accuracy}%</div>
+              <div className="text-[10px] opacity-60 uppercase">Accuracy</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-cyan-400">{matchResult?.avgReactionTime}ms</div>
+              <div className="text-[10px] opacity-60 uppercase">Reaction</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-amber-300">+{matchResult?.coinsEarned}</div>
+              <div className="text-[10px] opacity-60 uppercase">Coins 💰</div>
+            </div>
           </div>
         </div>
+
+        {/* Hero Upgrade Option (Career Mode) */}
+        {gameMode === 'career' && matchResult?.won && heroUpgradeLevel < 8 && (
+          <div className="w-full max-w-xs mb-5 bg-gradient-to-r from-purple-900/50 to-blue-900/50 border border-purple-500/30 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-yellow-400" />
+                <span className="font-bold">Hero Power Upgrade</span>
+              </div>
+              <span className="text-xs bg-purple-600 px-2 py-1 rounded">{heroUpgradeLevel}/8</span>
+            </div>
+            <div className="w-full bg-purple-900/50 rounded-full h-2 mb-3 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-purple-400 to-blue-400 h-full"
+                style={{ width: `${(heroUpgradeLevel / 8) * 100}%` }}
+              />
+            </div>
+            <p className="text-xs text-white/70 mb-3">Upgrade to unlock harder missions and increase hero stats</p>
+            <Button
+              onClick={() => {
+                if (storage.upgradeHeroPower(selectedHeroId, nextUpgradeCost)) {
+                  setHeroUpgradeLevel(heroUpgradeLevel + 1);
+                  const updatedProgress = storage.get();
+                  setProgress(updatedProgress);
+                  tennisAudio.click();
+                }
+              }}
+              disabled={!canUpgrade}
+              className={`w-full h-10 font-bold rounded-lg transition-all ${
+                canUpgrade
+                  ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500'
+                  : 'bg-white/10 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              {canUpgrade ? (
+                <>
+                  <Zap className="mr-2 h-4 w-4 inline" />
+                  Upgrade ({nextUpgradeCost} 💰)
+                </>
+              ) : heroUpgradeLevel >= 8 ? (
+                '✓ Max Level Reached'
+              ) : (
+                `Need ${nextUpgradeCost - progress.coins} more coins`
+              )}
+            </Button>
+          </div>
+        )}
+        
+        <div className={`flex gap-3 w-full max-w-xs ${gameMode === 'career' && matchResult?.won && nextMissionToPlay ? 'flex-col' : ''}`}>
+          <div className="flex gap-3 w-full">
+            <Button 
+              onClick={startGame} 
+              className="flex-1 h-12 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold"
+            >
+              <Play className="mr-2 h-5 w-5" /> Replay
+            </Button>
+            <Button 
+              onClick={() => {
+                if (gameMode === 'career') {
+                  setScreen('missionSelect');
+                } else {
+                  setScreen('menu');
+                }
+              }} 
+              className="flex-1 h-12 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20"
+            >
+              <Home className="mr-2 h-5 w-5" /> {gameMode === 'career' ? 'Back' : 'Menu'}
+            </Button>
+          </div>
+          {gameMode === 'career' && matchResult?.won && nextMissionToPlay && (
+            <Button 
+              onClick={() => {
+                setSelectedMission(nextMissionToPlay);
+                setSelectedCourt(nextMissionToPlay.difficulty);
+                tennisAudio.click();
+                setTimeout(() => startGame(), 100);
+              }} 
+              className="w-full h-12 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-400 hover:to-cyan-500 rounded-xl font-bold"
+            >
+              <ChevronRight className="mr-2 h-5 w-5" /> Next Mission
+            </Button>
+          )}
+        </div>
       </div>
-      
-      <div className="flex gap-3 w-full max-w-xs">
-        <Button 
-          onClick={startGame} 
-          className="flex-1 h-12 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold"
-        >
-          <Play className="mr-2 h-5 w-5" /> Replay
-        </Button>
-        <Button 
-          onClick={() => setScreen('menu')} 
-          className="flex-1 h-12 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20"
-        >
-          <Home className="mr-2 h-5 w-5" /> Menu
-        </Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderPausedOverlay = () => (
     <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
@@ -1084,6 +1846,8 @@ const TennisHeroGame: React.FC = () => {
         >
           {screen === 'menu' && renderMenuScreen()}
           {screen === 'modeSelect' && renderModeSelect()}
+          {screen === 'countrySelect' && renderCountrySelect()}
+          {screen === 'missionSelect' && renderMissionSelect()}
           {screen === 'courtSelect' && renderCourtSelect()}
           {screen === 'heroSelect' && renderHeroSelect()}
           {screen === 'settings' && renderSettings()}
@@ -1096,7 +1860,13 @@ const TennisHeroGame: React.FC = () => {
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
                 className="w-full h-full touch-none cursor-pointer"
-                onClick={handleInput}
+                onClick={(e) => {
+                  if (gameStateRef.current?.slowMotionActive) {
+                    handleCanvasClick(e);
+                  } else {
+                    handleInput();
+                  }
+                }}
                 onPointerMove={handlePointerMove}
               />
               
@@ -1108,6 +1878,36 @@ const TennisHeroGame: React.FC = () => {
               >
                 <Pause className="h-5 w-5" />
               </Button>
+              
+              {/* Slow Motion UI */}
+              {gameStateRef.current?.slowMotionActive && gameStateRef.current?.clickToHitActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 backdrop-blur-sm z-20 pointer-events-none">
+                  <div className="text-center">
+                    <div className="text-5xl font-black text-white mb-4" style={{ textShadow: '0 0 20px rgba(255,215,0,0.8)' }}>
+                      ⏱️
+                    </div>
+                    <div className="text-2xl font-bold text-yellow-300 mb-3">SLOW MOTION</div>
+                    <div className="text-white/90 mb-6">
+                      <span className="text-3xl font-black">
+                        {Math.max(0.0, ((gameStateRef.current.slowMotionStartTime + gameStateRef.current.slowMotionDuration - performance.now()) / 1000)).toFixed(1)}s
+                      </span>
+                    </div>
+                    <div className="text-white/70 text-sm">Click to hit the ball!</div>
+                    
+                    {/* Target reticle if cursor is over canvas */}
+                    {gameStateRef.current.targetClickPos && (
+                      <div
+                        className="absolute w-6 h-6 border-2 border-yellow-300 rounded-full pointer-events-none"
+                        style={{
+                          left: `${(gameStateRef.current.targetClickPos.x / CANVAS_WIDTH) * 100}%`,
+                          top: `${(gameStateRef.current.targetClickPos.y / CANVAS_HEIGHT) * 100}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
               
               {isPaused && renderPausedOverlay()}
             </>

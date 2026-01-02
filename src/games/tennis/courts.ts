@@ -94,6 +94,8 @@ export const getUnlockedCourts = (level: number): Court[] => {
 };
 
 // AI difficulty scaling per court
+// Initial levels are easier so player can beat the opponent
+// Difficulty increases gradually with each court level
 export const getAIDifficulty = (courtId: number): { 
   reactionTime: number; 
   accuracy: number; 
@@ -102,14 +104,22 @@ export const getAIDifficulty = (courtId: number): {
   hitWindow: number;
 } => {
   const difficulties = [
-    { reactionTime: 600, accuracy: 0.5, aggression: 0.3, ballSpeed: 4, hitWindow: 300 },
-    { reactionTime: 500, accuracy: 0.55, aggression: 0.35, ballSpeed: 4.5, hitWindow: 280 },
-    { reactionTime: 450, accuracy: 0.6, aggression: 0.4, ballSpeed: 5, hitWindow: 260 },
-    { reactionTime: 400, accuracy: 0.65, aggression: 0.45, ballSpeed: 5.5, hitWindow: 240 },
-    { reactionTime: 350, accuracy: 0.7, aggression: 0.5, ballSpeed: 6, hitWindow: 220 },
-    { reactionTime: 300, accuracy: 0.75, aggression: 0.55, ballSpeed: 6.5, hitWindow: 200 },
-    { reactionTime: 250, accuracy: 0.8, aggression: 0.6, ballSpeed: 7, hitWindow: 180 },
-    { reactionTime: 200, accuracy: 0.85, aggression: 0.7, ballSpeed: 8, hitWindow: 150 },
+    // Level 1: Very easy - AI makes many mistakes, slow movement
+    { reactionTime: 1500, accuracy: 0.15, aggression: 0.10, ballSpeed: 2.5, hitWindow: 500 },
+    // Level 2: Easy - AI still makes frequent mistakes
+    { reactionTime: 1200, accuracy: 0.22, aggression: 0.15, ballSpeed: 3, hitWindow: 420 },
+    // Level 3: Medium-easy - AI makes occasional mistakes
+    { reactionTime: 1000, accuracy: 0.30, aggression: 0.20, ballSpeed: 3.5, hitWindow: 350 },
+    // Level 4: Medium - Balanced gameplay
+    { reactionTime: 750, accuracy: 0.42, aggression: 0.30, ballSpeed: 4, hitWindow: 300 },
+    // Level 5: Medium-hard - AI is competitive
+    { reactionTime: 550, accuracy: 0.55, aggression: 0.40, ballSpeed: 5, hitWindow: 250 },
+    // Level 6: Hard - Challenging for most players
+    { reactionTime: 400, accuracy: 0.68, aggression: 0.50, ballSpeed: 6, hitWindow: 200 },
+    // Level 7: Very hard - Expert level AI
+    { reactionTime: 280, accuracy: 0.80, aggression: 0.60, ballSpeed: 7, hitWindow: 150 },
+    // Level 8: Expert - Supreme difficulty
+    { reactionTime: 150, accuracy: 0.90, aggression: 0.75, ballSpeed: 8, hitWindow: 120 },
   ];
   
   return difficulties[Math.min(courtId - 1, difficulties.length - 1)];
