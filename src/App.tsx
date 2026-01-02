@@ -27,6 +27,10 @@ import TetrisGame from "./games/tetris/TetrisGame";
 import MinesweeperGame from "./games/minesweeper/MinesweeperGame";
 import TowerDefense from "./games/tower-defense/TowerDefense";
 import TennisHeroGame from "./games/tennis/TennisHeroGame";
+import BadmintonSmashGame from "./games/badminton/BadmintonSmashGame";
+import PingPongProGame from "./games/tabletennis/PingPongProGame";
+import PickleballChampionGame from "./games/pickleball/PickleballChampionGame";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -58,6 +62,9 @@ const App = () => (
             <Route path="/game/tetris" element={<TetrisGame />} />
             <Route path="/game/minesweeper" element={<MinesweeperGame />} />
             <Route path="/game/tennis-hero" element={<TennisHeroGame />} />
+            <Route path="/game/badminton-smash" element={<BadmintonSmashGame />} />
+            <Route path="/game/ping-pong-pro" element={<PingPongProGame />} />
+            <Route path="/game/pickleball-champion" element={<PickleballChampionGame />} />
             
             {/* Info Pages Info */}
             <Route path="/developers" element={<Developers />} />
