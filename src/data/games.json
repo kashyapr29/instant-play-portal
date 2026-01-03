@@ -188,5 +188,35 @@
     "featured": true,
     "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
     "isPlayable": true
+  },
+  {
+    "id": "badminton-smash",
+    "title": "Badminton Smash",
+    "thumbnail": "/images/tennis-hero.png",
+    "gameUrl": "/game/badminton-smash",
+    "category": "Sports",
+    "featured": true,
+    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "isPlayable": true
+  },
+  {
+    "id": "ping-pong-pro",
+    "title": "ping-pong-pro",
+    "thumbnail": "/images/tennis-hero.png",
+    "gameUrl": "/game/ping-pong-pro",
+    "category": "Sports",
+    "featured": true,
+    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "isPlayable": true
+  },
+  {
+    "id": "pickleball-champion",
+    "title": "pickleball-champion",
+    "thumbnail": "/images/tennis-hero.png",
+    "gameUrl": "/game/pickleball-champion",
+    "category": "Sports",
+    "featured": true,
+    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "isPlayable": true
   }
 ]
