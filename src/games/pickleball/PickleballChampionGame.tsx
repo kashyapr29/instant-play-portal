@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import { GameState, GameScreen, GameMode, Hero, Court, Particle, PowerUp, GameProgress } from './types';
 import { COURTS, getCourtById, getUnlockedCourts, getAIDifficulty } from './courts';
-import { HEROES, getHeroById, getUnlockedHeroes, getHeroesByGender } from './heroes';
+import { HEROES, getHeroById, getUnlockedHeroes } from './heroes';
 import { storage } from './storage';
 import { pickleballAudio } from './audio';
-import { POWER_UP_CONFIGS, getPowerUpConfig } from './powerups';
+import { POWER_UP_CONFIGS } from './powerups';
 import { 
   renderCourt, renderPlayer, renderBall, renderPowerUp, 
   renderParticles, renderHitIndicator, renderScore, renderTimingBar 
@@ -45,7 +45,7 @@ const createInitialBall = () => ({
   spin: 0,
   speed: 0,
   visible: false,
-  trajectory: [],
+  trajectory: [] as { x: number; y: number }[],
 });
 
 export default function PickleballChampionGame() {
@@ -170,22 +170,22 @@ export default function PickleballChampionGame() {
       ) {
         const now = Date.now();
         const windowDuration = gs.hitWindow.end - gs.hitWindow.start;
-        const progressTime = (now - gs.hitWindow.start) / windowDuration;
+        const hitProgress = (now - gs.hitWindow.start) / windowDuration;
         
         let quality: 'perfect' | 'good' | 'early' | 'late' | 'miss';
         let powerMultiplier = 1;
         
-        if (progressTime >= 0.4 && progressTime <= 0.6) {
+        if (hitProgress >= 0.4 && hitProgress <= 0.6) {
           quality = 'perfect';
           powerMultiplier = 1.4;
           pickleballAudio.playDink();
           addParticles(gs.ball.x, gs.ball.y, 'spark', 14);
-        } else if (progressTime >= 0.25 && progressTime <= 0.75) {
+        } else if (hitProgress >= 0.25 && hitProgress <= 0.75) {
           quality = 'good';
           powerMultiplier = 1.2;
           pickleballAudio.playHit();
           addParticles(gs.ball.x, gs.ball.y, 'bounce', 7);
-        } else if (progressTime < 0.25) {
+        } else if (hitProgress < 0.25) {
           quality = 'early';
           powerMultiplier = 0.85;
           pickleballAudio.playHit();
@@ -261,7 +261,6 @@ export default function PickleballChampionGame() {
       opponent: [...gs.opponentScore] as [number, number],
     });
 
-    // Win at 11, win by 2
     const playerPts = gs.playerScore[0];
     const opponentPts = gs.opponentScore[0];
     
@@ -318,7 +317,6 @@ export default function PickleballChampionGame() {
     setScreen('matchEnd');
   };
 
-  // Game loop
   useEffect(() => {
     if (screen !== 'playing') return;
 
@@ -338,20 +336,17 @@ export default function PickleballChampionGame() {
         if (gs.ball.visible) {
           const timeScale = gs.slowMotionActive ? 0.35 : 1;
           
-          // Pickleball has less bounce/spin than other racket sports
           gs.ball.vy += 0.12 * timeScale;
           
           gs.ball.x += gs.ball.vx * timeScale;
           gs.ball.y += gs.ball.vy * timeScale;
 
-          // Boundaries
           if (gs.ball.y < 50 || gs.ball.y > CANVAS_HEIGHT - 50) {
             gs.ball.vy *= -0.75;
             gs.ball.y = Math.max(50, Math.min(CANVAS_HEIGHT - 50, gs.ball.y));
             pickleballAudio.playBounce();
           }
 
-          // Net
           if (Math.abs(gs.ball.x - CANVAS_WIDTH / 2) < 6) {
             if (Math.abs(gs.ball.vy) < 2) {
               gs.ball.vx *= -0.3;
@@ -359,14 +354,12 @@ export default function PickleballChampionGame() {
             }
           }
 
-          // Scoring
           if (gs.ball.x < 45) {
             scorePoint('opponent');
           } else if (gs.ball.x > CANVAS_WIDTH - 45) {
             scorePoint('player');
           }
 
-          // AI
           const aiDiff = getAIDifficulty(gs.currentCourt);
           const targetY = gs.ball.y - gs.opponent.height / 2;
           const aiSpeed = 3.5 + aiDiff.accuracy * 4;
@@ -376,7 +369,6 @@ export default function PickleballChampionGame() {
           }
           gs.opponent.y = Math.max(50, Math.min(CANVAS_HEIGHT - gs.opponent.height - 50, gs.opponent.y));
 
-          // AI hit
           if (
             gs.ball.vx < 0 &&
             gs.ball.x < gs.opponent.x + 28 &&
@@ -400,7 +392,6 @@ export default function PickleballChampionGame() {
           }
         }
 
-        // Particles
         particlesRef.current = particlesRef.current.filter(p => {
           p.x += p.vx;
           p.y += p.vy;
@@ -414,7 +405,6 @@ export default function PickleballChampionGame() {
         }
       }
 
-      // Render
       const court = getCourtById(gs.currentCourt);
       if (court) {
         renderCourt(ctx, court, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -444,7 +434,6 @@ export default function PickleballChampionGame() {
     };
   }, [screen, isPaused, lastHitQuality]);
 
-  // Input handlers
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || screen !== 'playing') return;
@@ -464,7 +453,6 @@ export default function PickleballChampionGame() {
     };
   }, [screen, handleInput]);
 
-  // UI Components
   const MenuScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-8">
       <div className="text-center mb-8">
@@ -498,11 +486,11 @@ export default function PickleballChampionGame() {
       <div className="mt-8 flex items-center gap-6 text-lime-200">
         <div className="flex items-center gap-2">
           <Trophy className="h-5 w-5 text-yellow-400" />
-          <span>{progress.totalWins} Wins</span>
+          <span>Wins: {progress.totalWins}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-lime-400" />
-          <span>{progress.coins} Coins</span>
+          <Star className="h-5 w-5 text-yellow-400" />
+          <span>{progress.coins} coins</span>
         </div>
       </div>
     </div>
@@ -510,131 +498,95 @@ export default function PickleballChampionGame() {
 
   const ModeSelectScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-8">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-lime-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-8">SELECT MODE</h2>
+      <h2 className="text-3xl font-bold text-white mb-8">Select Mode</h2>
 
-      <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
+      <div className="grid grid-cols-2 gap-4 w-full max-w-md">
         {[
-          { mode: 'career' as GameMode, icon: '🏆', title: 'Career', desc: 'Tournament journey' },
-          { mode: 'quickMatch' as GameMode, icon: '⚡', title: 'Quick Match', desc: 'Jump right in' },
-          { mode: 'practice' as GameMode, icon: '🎯', title: 'Practice', desc: 'Perfect your dinks' },
-          { mode: 'challenge' as GameMode, icon: '🔥', title: 'Challenge', desc: 'Test your skills' },
-        ].map(({ mode, icon, title, desc }) => (
+          { mode: 'quickMatch' as GameMode, title: 'Quick Match', desc: 'Jump right in!', icon: <Zap className="h-8 w-8" /> },
+          { mode: 'career' as GameMode, title: 'Career', desc: 'Progress through courts', icon: <Trophy className="h-8 w-8" /> },
+          { mode: 'practice' as GameMode, title: 'Practice', desc: 'No pressure', icon: <Target className="h-8 w-8" /> },
+          { mode: 'challenge' as GameMode, title: 'Challenge', desc: 'Test your limits', icon: <Star className="h-8 w-8" /> },
+        ].map(({ mode, title, desc, icon }) => (
           <Card
             key={mode}
             onClick={() => { setGameMode(mode); initGame(); }}
-            className="p-6 bg-gradient-to-br from-lime-800/50 to-green-900/50 border-lime-600/50 hover:border-lime-400 cursor-pointer transition-all hover:scale-105"
+            className="p-6 cursor-pointer bg-white/10 border-white/20 hover:bg-white/20 transition-all text-center"
           >
-            <div className="text-4xl mb-2">{icon}</div>
-            <h3 className="text-lg font-bold text-white">{title}</h3>
-            <p className="text-sm text-lime-300">{desc}</p>
+            <div className="text-lime-300 mb-2 flex justify-center">{icon}</div>
+            <h3 className="text-white font-bold text-lg">{title}</h3>
+            <p className="text-lime-200 text-sm">{desc}</p>
           </Card>
         ))}
       </div>
     </div>
   );
 
-  const HeroSelectScreen = () => {
-    const [gender, setGender] = useState<'male' | 'female'>('male');
-    const heroes = getHeroesByGender(gender);
+  const HeroSelectScreen = () => (
+    <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-6">
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
+      </Button>
 
-    return (
-      <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-6">
-        <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-lime-200">
-          <ChevronLeft className="h-5 w-5" /> Back
-        </Button>
+      <h2 className="text-3xl font-bold text-white mb-6">Choose Your Player</h2>
 
-        <h2 className="text-3xl font-bold text-white mb-4">SELECT PLAYER</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl">
+        {HEROES.map((hero) => {
+          const isUnlocked = progress.unlockedHeroes.includes(hero.id);
+          const isSelected = selectedHero?.id === hero.id;
 
-        <div className="flex gap-2 mb-6">
-          {(['male', 'female'] as const).map(g => (
-            <Button
-              key={g}
-              onClick={() => setGender(g)}
-              variant={gender === g ? 'default' : 'outline'}
-              className={gender === g ? 'bg-lime-600' : 'border-lime-500 text-lime-200'}
+          return (
+            <Card
+              key={hero.id}
+              onClick={() => isUnlocked && setSelectedHero(hero)}
+              className={`p-4 cursor-pointer transition-all ${
+                isSelected ? 'ring-2 ring-yellow-400 bg-white/20' : 'bg-white/10 hover:bg-white/15'
+              } ${!isUnlocked ? 'opacity-50' : ''}`}
             >
-              {g.charAt(0).toUpperCase() + g.slice(1)}
-            </Button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 w-full max-w-2xl overflow-y-auto max-h-[350px]">
-          {heroes.map(hero => {
-            const isUnlocked = progress.unlockedHeroes.includes(hero.id);
-            const isSelected = selectedHero?.id === hero.id;
-
-            return (
-              <Card
-                key={hero.id}
-                onClick={() => {
-                  if (isUnlocked) {
-                    setSelectedHero(hero);
-                    const newProgress = { ...progress, selectedHero: hero.id };
-                    setProgress(newProgress);
-                    storage.saveProgress(newProgress);
-                  } else if (progress.coins >= hero.unlockCost) {
-                    const newProgress = {
-                      ...progress,
-                      coins: progress.coins - hero.unlockCost,
-                      unlockedHeroes: [...progress.unlockedHeroes, hero.id],
-                      selectedHero: hero.id,
-                    };
-                    setProgress(newProgress);
-                    storage.saveProgress(newProgress);
-                    setSelectedHero(hero);
-                  }
-                }}
-                className={`p-4 cursor-pointer transition-all ${
-                  isSelected ? 'bg-lime-600 border-lime-400 scale-105' : isUnlocked ? 'bg-lime-800/50 border-lime-600/50 hover:border-lime-400' : 'bg-gray-800/50 border-gray-600/50'
-                }`}
-              >
-                <div className="text-4xl mb-2">{hero.avatar}</div>
-                <h3 className="font-bold text-white text-sm">{hero.name}</h3>
-                {!isUnlocked && (
-                  <div className="flex items-center gap-1 text-yellow-400 text-xs mt-1">
-                    <Lock className="h-3 w-3" />
-                    {hero.unlockCost} coins
-                  </div>
-                )}
-                {isUnlocked && (
-                  <div className="mt-2 space-y-1">
-                    <StatBar label="SPD" value={hero.stats.speed} color="bg-lime-400" />
-                    <StatBar label="PWR" value={hero.stats.power} color="bg-green-400" />
-                    <StatBar label="DNK" value={hero.stats.dink} color="bg-yellow-400" />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+              <div className="text-4xl text-center mb-2">{hero.avatar}</div>
+              <h3 className="text-white font-bold text-center text-sm">{hero.name}</h3>
+              {!isUnlocked && (
+                <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs mt-1">
+                  <Lock className="h-3 w-3" /> {hero.unlockCost}
+                </div>
+              )}
+              {isUnlocked && (
+                <div className="grid grid-cols-2 gap-1 mt-2 text-xs text-lime-200">
+                  <span>SPD: {hero.stats.speed}</span>
+                  <span>PWR: {hero.stats.power}</span>
+                  <span>TIM: {hero.stats.timing}</span>
+                  <span>DNK: {hero.stats.dink}</span>
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
-    );
-  };
 
-  const StatBar = ({ label, value, color }: { label: string; value: number; color: string }) => (
-    <div className="flex justify-between text-xs text-lime-300">
-      <span>{label}</span>
-      <div className="w-16 bg-lime-900 rounded-full h-1.5">
-        <div className={`${color} h-1.5 rounded-full`} style={{ width: `${value * 10}%` }} />
-      </div>
+      <Button
+        onClick={() => setScreen('menu')}
+        className="mt-6 bg-gradient-to-r from-lime-500 to-green-500"
+        disabled={!selectedHero}
+      >
+        Confirm Selection
+      </Button>
     </div>
   );
 
   const CourtSelectScreen = () => (
     <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-6">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-lime-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-6">SELECT COURT</h2>
+      <h2 className="text-3xl font-bold text-white mb-6">Select Court</h2>
 
-      <div className="grid grid-cols-2 gap-4 w-full max-w-xl">
-        {COURTS.map(court => {
-          const isUnlocked = progress.currentLevel >= court.unlockLevel;
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl">
+        {COURTS.map((court) => {
+          const isUnlocked = court.unlockLevel <= progress.currentLevel;
           const isSelected = selectedCourt?.id === court.id;
 
           return (
@@ -642,65 +594,58 @@ export default function PickleballChampionGame() {
               key={court.id}
               onClick={() => isUnlocked && setSelectedCourt(court)}
               className={`p-4 cursor-pointer transition-all ${
-                isSelected ? 'border-lime-400 scale-105' : isUnlocked ? 'border-lime-600/50 hover:border-lime-400' : 'border-gray-600/50 opacity-50'
-              }`}
-              style={{
-                background: isUnlocked ? `linear-gradient(135deg, ${court.bgColors[0]}, ${court.bgColors[1]})` : '#1f2937',
-              }}
+                isSelected ? 'ring-2 ring-yellow-400 bg-white/20' : 'bg-white/10 hover:bg-white/15'
+              } ${!isUnlocked ? 'opacity-50' : ''}`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-white">{court.name}</h3>
-                {!isUnlocked && <Lock className="h-4 w-4 text-gray-400" />}
-                {isUnlocked && progress.completedLevels.includes(court.id) && (
-                  <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-                )}
-              </div>
-              <p className="text-xs text-white/70">{court.description}</p>
+              <div 
+                className="h-16 rounded mb-2"
+                style={{ background: `linear-gradient(135deg, ${court.bgColors[0]}, ${court.bgColors[1]})` }}
+              />
+              <h3 className="text-white font-bold text-center text-sm">{court.name}</h3>
+              <p className="text-lime-200 text-xs text-center">{court.type}</p>
+              {!isUnlocked && (
+                <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs mt-1">
+                  <Lock className="h-3 w-3" /> Level {court.unlockLevel}
+                </div>
+              )}
             </Card>
           );
         })}
       </div>
+
+      <Button
+        onClick={() => setScreen('menu')}
+        className="mt-6 bg-gradient-to-r from-lime-500 to-green-500"
+        disabled={!selectedCourt}
+      >
+        Confirm Selection
+      </Button>
     </div>
   );
 
   const SettingsScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-8">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-lime-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-8">SETTINGS</h2>
+      <h2 className="text-3xl font-bold text-white mb-8">Settings</h2>
 
-      <div className="space-y-6 w-full max-w-xs">
-        <div className="flex items-center justify-between p-4 bg-lime-800/30 rounded-lg">
-          <span className="text-white font-medium">Sound</span>
-          <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="ghost" size="icon" className="text-lime-200">
-            {soundEnabled ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
-          </Button>
-        </div>
+      <div className="flex flex-col gap-4 w-full max-w-xs">
+        <Button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          variant="outline"
+          className="h-14 border-lime-400 text-lime-100"
+        >
+          {soundEnabled ? <Volume2 className="mr-2 h-5 w-5" /> : <VolumeX className="mr-2 h-5 w-5" />}
+          Sound: {soundEnabled ? 'ON' : 'OFF'}
+        </Button>
 
-        <div className="p-4 bg-lime-800/30 rounded-lg">
-          <h3 className="text-white font-medium mb-3">Difficulty</h3>
-          <div className="flex gap-2">
-            {(['easy', 'normal', 'hard'] as const).map(diff => (
-              <Button
-                key={diff}
-                onClick={() => {
-                  const newProgress = { ...progress, difficulty: diff };
-                  setProgress(newProgress);
-                  storage.saveProgress(newProgress);
-                }}
-                variant={progress.difficulty === diff ? 'default' : 'outline'}
-                className={progress.difficulty === diff ? 'bg-lime-600' : 'border-lime-500 text-lime-200'}
-                size="sm"
-              >
-                {diff.charAt(0).toUpperCase() + diff.slice(1)}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <Button onClick={() => { storage.clearProgress(); setProgress(storage.loadProgress()); }} variant="destructive" className="w-full">
+        <Button
+          onClick={() => { storage.clearProgress(); setProgress(storage.loadProgress()); }}
+          variant="destructive"
+          className="h-12"
+        >
           Reset Progress
         </Button>
       </div>
@@ -709,30 +654,27 @@ export default function PickleballChampionGame() {
 
   const MatchEndScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-lime-900 via-green-800 to-emerald-900 rounded-xl p-8">
-      <div className="text-center">
-        <div className="text-6xl mb-4">{matchResult?.won ? '🏆' : '😢'}</div>
-        <h2 className="text-4xl font-black text-white mb-2">{matchResult?.won ? 'VICTORY!' : 'DEFEAT'}</h2>
-        <p className="text-lime-200 text-xl mb-6">{matchResult?.playerScore} - {matchResult?.opponentScore}</p>
+      <h2 className={`text-4xl font-black mb-4 ${matchResult?.won ? 'text-yellow-400' : 'text-red-400'}`}>
+        {matchResult?.won ? '🏆 VICTORY!' : '😔 DEFEAT'}
+      </h2>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-lime-800/30 p-4 rounded-lg">
-            <p className="text-lime-300 text-sm">Dinks</p>
-            <p className="text-2xl font-bold text-white">{matchResult?.dinks}</p>
-          </div>
-          <div className="bg-lime-800/30 p-4 rounded-lg">
-            <p className="text-lime-300 text-sm">Coins Earned</p>
-            <p className="text-2xl font-bold text-yellow-400">+{matchResult?.coinsEarned}</p>
-          </div>
+      <div className="bg-black/30 rounded-xl p-6 mb-6 text-center">
+        <div className="text-3xl font-bold text-white mb-4">
+          {matchResult?.playerScore} - {matchResult?.opponentScore}
         </div>
+        <div className="grid grid-cols-2 gap-4 text-lime-200">
+          <div>Dinks: {matchResult?.dinks}</div>
+          <div>Coins: +{matchResult?.coinsEarned}</div>
+        </div>
+      </div>
 
-        <div className="flex gap-4">
-          <Button onClick={() => setScreen('menu')} variant="outline" className="border-lime-400 text-lime-100">
-            Menu
-          </Button>
-          <Button onClick={initGame} className="bg-gradient-to-r from-lime-500 to-green-500 text-white font-bold">
-            Play Again
-          </Button>
-        </div>
+      <div className="flex gap-4">
+        <Button onClick={initGame} className="bg-gradient-to-r from-lime-500 to-green-500">
+          <Play className="mr-2 h-5 w-5" /> Play Again
+        </Button>
+        <Button onClick={() => setScreen('menu')} variant="outline" className="border-lime-400 text-lime-100">
+          Main Menu
+        </Button>
       </div>
     </div>
   );
@@ -740,15 +682,12 @@ export default function PickleballChampionGame() {
   const PausedOverlay = () => (
     <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-xl">
       <div className="text-center">
-        <h2 className="text-4xl font-bold text-white mb-6">PAUSED</h2>
-        <div className="flex flex-col gap-3">
-          <Button
-            onClick={() => { setIsPaused(false); if (gameStateRef.current) gameStateRef.current.isPaused = false; }}
-            className="bg-lime-600 hover:bg-lime-500"
-          >
+        <h2 className="text-4xl font-bold text-white mb-8">PAUSED</h2>
+        <div className="flex flex-col gap-4">
+          <Button onClick={() => { setIsPaused(false); if (gameStateRef.current) gameStateRef.current.isPaused = false; }}>
             <Play className="mr-2 h-5 w-5" /> Resume
           </Button>
-          <Button onClick={() => setScreen('menu')} variant="outline" className="border-lime-400 text-lime-100">
+          <Button onClick={() => setScreen('menu')} variant="outline">
             Quit to Menu
           </Button>
         </div>
@@ -764,32 +703,29 @@ export default function PickleballChampionGame() {
       {screen === 'courtSelect' && <CourtSelectScreen />}
       {screen === 'settings' && <SettingsScreen />}
       {screen === 'matchEnd' && <MatchEndScreen />}
-      
+
       {screen === 'playing' && (
         <div className="relative">
-          <div className="flex items-center justify-between mb-2 px-2">
+          <div className="absolute top-2 right-2 z-10 flex gap-2">
             <Button
               onClick={() => { setIsPaused(true); if (gameStateRef.current) gameStateRef.current.isPaused = true; }}
-              variant="ghost" size="icon" className="text-lime-200"
+              size="sm"
+              variant="secondary"
             >
-              <Pause className="h-5 w-5" />
+              <Pause className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-2 text-lime-200">
-              <Zap className="h-4 w-4 text-yellow-400" />
-              <span>{progress.coins}</span>
-            </div>
-            <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="ghost" size="icon" className="text-lime-200">
-              {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+            <Button onClick={() => setSoundEnabled(!soundEnabled)} size="sm" variant="secondary">
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
           </div>
-          
+
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            className="w-full rounded-xl border-2 border-lime-600/50 shadow-2xl cursor-none"
+            className="w-full rounded-xl shadow-2xl cursor-none"
           />
-          
+
           {isPaused && <PausedOverlay />}
         </div>
       )}

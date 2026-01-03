@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import { GameState, GameScreen, GameMode, Hero, Table, Particle, PowerUp, GameProgress } from './types';
 import { TABLES, getTableById, getUnlockedTables, getAIDifficulty } from './tables';
-import { HEROES, getHeroById, getUnlockedHeroes, getHeroesByGender } from './heroes';
+import { HEROES, getHeroById, getUnlockedHeroes } from './heroes';
 import { storage } from './storage';
 import { tableTennisAudio } from './audio';
-import { POWER_UP_CONFIGS, getPowerUpConfig } from './powerups';
+import { POWER_UP_CONFIGS } from './powerups';
 import { 
   renderTable, renderPlayer, renderBall, renderPowerUp, 
   renderParticles, renderHitIndicator, renderScore, renderTimingBar 
@@ -67,7 +67,6 @@ export default function PingPongProGame() {
   const [matchResult, setMatchResult] = useState<any>(null);
   const [lastHitQuality, setLastHitQuality] = useState<string | null>(null);
 
-  // Initialize game
   useEffect(() => {
     const hero = getHeroById(progress.selectedHero);
     if (hero) setSelectedHero(hero);
@@ -75,7 +74,6 @@ export default function PingPongProGame() {
     if (tables.length > 0) setSelectedTable(tables[0]);
   }, []);
 
-  // Sound toggle
   useEffect(() => {
     tableTennisAudio.setEnabled(soundEnabled);
     const newProgress = { ...progress, soundEnabled };
@@ -98,10 +96,11 @@ export default function PingPongProGame() {
       playerScore: [0, 0],
       opponentScore: [0, 0],
       serving: 'player',
+      serveCount: 0,
       rallyCount: 0,
       matchTime: 0,
       activePowerUps: [],
-      powerUpsOnCourt: [],
+      powerUpsOnTable: [],
       hitWindow: null,
       lastHitQuality: null,
       isPaused: false,
@@ -126,7 +125,7 @@ export default function PingPongProGame() {
     const gs = gameStateRef.current;
     gs.serving = server;
     gs.ball.visible = true;
-    gs.ball.bounced = false;
+    gs.ball.bounceCount = 0;
     
     if (server === 'player') {
       gs.ball.x = gs.player.x + gs.player.width + 15;
@@ -156,10 +155,8 @@ export default function PingPongProGame() {
     const rect = canvas.getBoundingClientRect();
     const y = ((clientY - rect.top) / rect.height) * CANVAS_HEIGHT;
 
-    // Move player
     gs.player.y = Math.max(80, Math.min(CANVAS_HEIGHT - gs.player.height - 80, y - gs.player.height / 2));
 
-    // Check if ball is in hit range
     if (gs.hitWindow && gs.ball.visible) {
       const hitZone = {
         x: gs.player.x + gs.player.width,
@@ -176,25 +173,25 @@ export default function PingPongProGame() {
       ) {
         const now = Date.now();
         const windowDuration = gs.hitWindow.end - gs.hitWindow.start;
-        const progress = (now - gs.hitWindow.start) / windowDuration;
+        const hitProgress = (now - gs.hitWindow.start) / windowDuration;
         
         let quality: 'perfect' | 'good' | 'early' | 'late' | 'miss';
         let powerMultiplier = 1;
         let spinBonus = 0;
         
-        if (progress >= 0.4 && progress <= 0.6) {
+        if (hitProgress >= 0.4 && hitProgress <= 0.6) {
           quality = 'perfect';
           powerMultiplier = 1.4;
           spinBonus = 3;
           tableTennisAudio.playSmash();
           addParticles(gs.ball.x, gs.ball.y, 'spark', 12);
-        } else if (progress >= 0.25 && progress <= 0.75) {
+        } else if (hitProgress >= 0.25 && hitProgress <= 0.75) {
           quality = 'good';
           powerMultiplier = 1.15;
           spinBonus = 1;
           tableTennisAudio.playHit();
           addParticles(gs.ball.x, gs.ball.y, 'bounce', 6);
-        } else if (progress < 0.25) {
+        } else if (hitProgress < 0.25) {
           quality = 'early';
           powerMultiplier = 0.85;
           tableTennisAudio.playHit();
@@ -208,7 +205,6 @@ export default function PingPongProGame() {
         setLastHitQuality(quality);
         setTimeout(() => setLastHitQuality(null), 700);
 
-        // Return ball
         const baseSpeed = 9 + gs.player.power * 0.4;
         const speed = baseSpeed * powerMultiplier;
         const angle = (y - gs.ball.y) * 0.015;
@@ -217,7 +213,7 @@ export default function PingPongProGame() {
         gs.ball.vy = angle * speed * 0.4;
         gs.ball.speed = speed;
         gs.ball.spin = (Math.random() - 0.5) * 2 + spinBonus;
-        gs.ball.bounced = false;
+        gs.ball.bounceCount = 0;
         
         gs.hitWindow = null;
         gs.rallyCount++;
@@ -234,8 +230,7 @@ export default function PingPongProGame() {
 
     for (let i = 0; i < count; i++) {
       particlesRef.current.push({
-        x,
-        y,
+        x, y,
         vx: (Math.random() - 0.5) * 6,
         vy: (Math.random() - 0.5) * 6,
         life: 1,
@@ -266,7 +261,6 @@ export default function PingPongProGame() {
       opponent: [...gs.opponentScore] as [number, number],
     });
 
-    // Check for game win (11 points, win by 2)
     const playerPts = gs.playerScore[0];
     const opponentPts = gs.opponentScore[0];
     
@@ -275,7 +269,6 @@ export default function PingPongProGame() {
       return;
     }
 
-    // Service change every 2 points
     const totalPoints = playerPts + opponentPts;
     const newServer = Math.floor(totalPoints / 2) % 2 === 0 ? 'player' : 'opponent';
     
@@ -307,7 +300,7 @@ export default function PingPongProGame() {
     newProgress.totalMatches++;
     if (playerWon) {
       newProgress.totalWins++;
-      newProgress.totalRallies += gs.rallyCount;
+      newProgress.totalSpins += gs.rallyCount;
       if (gameMode === 'career' && selectedTable) {
         if (!newProgress.completedLevels.includes(selectedTable.id)) {
           newProgress.completedLevels.push(selectedTable.id);
@@ -327,7 +320,6 @@ export default function PingPongProGame() {
     setScreen('matchEnd');
   };
 
-  // Game loop
   useEffect(() => {
     if (screen !== 'playing') return;
 
@@ -347,26 +339,23 @@ export default function PingPongProGame() {
         if (gs.ball.visible) {
           const timeScale = gs.slowMotionActive ? 0.35 : 1;
           
-          // Ball physics - slight gravity and spin effect
           gs.ball.vy += 0.08 * timeScale;
           gs.ball.vy += gs.ball.spin * 0.02 * timeScale;
           
           gs.ball.x += gs.ball.vx * timeScale;
           gs.ball.y += gs.ball.vy * timeScale;
 
-          // Table surface bounce
           const tableTop = 120;
           const tableBottom = CANVAS_HEIGHT - 120;
           
           if (gs.ball.y > tableBottom) {
-            if (!gs.ball.bounced) {
-              gs.ball.bounced = true;
+            if (gs.ball.bounceCount === 0) {
+              gs.ball.bounceCount = 1;
               gs.ball.vy *= -0.8;
               gs.ball.y = tableBottom;
               tableTennisAudio.playBounce();
               addParticles(gs.ball.x, gs.ball.y, 'bounce', 4);
             } else {
-              // Double bounce = point
               scorePoint(gs.ball.vx > 0 ? 'opponent' : 'player');
             }
           }
@@ -376,7 +365,6 @@ export default function PingPongProGame() {
             gs.ball.y = tableTop;
           }
 
-          // Net collision
           if (Math.abs(gs.ball.x - CANVAS_WIDTH / 2) < 5 && gs.ball.y > tableTop) {
             if (gs.ball.y > CANVAS_HEIGHT / 2 - 20) {
               gs.ball.vx *= -0.5;
@@ -384,24 +372,21 @@ export default function PingPongProGame() {
             }
           }
 
-          // Scoring
           if (gs.ball.x < 60) {
             scorePoint('opponent');
           } else if (gs.ball.x > CANVAS_WIDTH - 60) {
             scorePoint('player');
           }
 
-          // AI opponent
-          const difficulty = getAIDifficulty(gs.currentTable);
+          const aiDiff = getAIDifficulty(gs.currentTable);
           const targetY = gs.ball.y - gs.opponent.height / 2;
-          const aiSpeed = 4 + difficulty * 0.4;
+          const aiSpeed = 4 + aiDiff.accuracy * 4;
           
           if (Math.abs(gs.opponent.y - targetY) > 4) {
             gs.opponent.y += (targetY - gs.opponent.y) * 0.07 * aiSpeed / 4;
           }
           gs.opponent.y = Math.max(80, Math.min(CANVAS_HEIGHT - gs.opponent.height - 80, gs.opponent.y));
 
-          // AI hit
           if (
             gs.ball.vx < 0 &&
             gs.ball.x < gs.opponent.x + 25 &&
@@ -409,24 +394,23 @@ export default function PingPongProGame() {
             gs.ball.y > gs.opponent.y - 8 &&
             gs.ball.y < gs.opponent.y + gs.opponent.height + 8
           ) {
-            const hitChance = 0.75 + difficulty * 0.08;
+            const hitChance = 0.75 + aiDiff.accuracy * 0.2;
             if (Math.random() < hitChance) {
-              const speed = 7 + difficulty + Math.random() * 1.5;
+              const speed = 7 + aiDiff.ballSpeed + Math.random() * 1.5;
               
               gs.ball.vx = -speed;
               gs.ball.vy = (Math.random() - 0.5) * 3;
               gs.ball.spin = (Math.random() - 0.5) * 2;
-              gs.ball.bounced = false;
+              gs.ball.bounceCount = 0;
               
               tableTennisAudio.playHit();
               addParticles(gs.ball.x, gs.ball.y, 'bounce', 4);
               
-              gs.hitWindow = { start: Date.now(), end: Date.now() + 1000 - difficulty * 80 };
+              gs.hitWindow = { start: Date.now(), end: Date.now() + aiDiff.hitWindow };
             }
           }
         }
 
-        // Update particles
         particlesRef.current = particlesRef.current.filter(p => {
           p.x += p.vx;
           p.y += p.vy;
@@ -440,25 +424,26 @@ export default function PingPongProGame() {
         }
       }
 
-      // Render
       const table = getTableById(gs.currentTable);
       if (table) {
         renderTable(ctx, table, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
-      renderPlayer(ctx, gs.player, true);
-      renderPlayer(ctx, gs.opponent, false);
+      renderPlayer(ctx, gs.player, false, false);
+      renderPlayer(ctx, gs.opponent, true, false);
       renderBall(ctx, gs.ball);
       
-      gs.powerUpsOnCourt.forEach(p => renderPowerUp(ctx, p));
+      gs.powerUpsOnTable.forEach(p => renderPowerUp(ctx, p, Date.now()));
       renderParticles(ctx, particlesRef.current);
       
       if (lastHitQuality) {
-        renderHitIndicator(ctx, lastHitQuality, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        renderHitIndicator(ctx, lastHitQuality as any, 1, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
       }
       
       renderScore(ctx, gs.playerScore, gs.opponentScore, gs.serving, CANVAS_WIDTH);
-      renderTimingBar(ctx, gs.hitWindow, CANVAS_WIDTH, CANVAS_HEIGHT);
+      
+      const timingProgress = gs.hitWindow ? (Date.now() - gs.hitWindow.start) / (gs.hitWindow.end - gs.hitWindow.start) : 0;
+      renderTimingBar(ctx, timingProgress, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       animationRef.current = requestAnimationFrame(gameLoop);
     };
@@ -470,7 +455,6 @@ export default function PingPongProGame() {
     };
   }, [screen, isPaused, lastHitQuality]);
 
-  // Input handlers
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || screen !== 'playing') return;
@@ -490,7 +474,6 @@ export default function PingPongProGame() {
     };
   }, [screen, handleInput]);
 
-  // UI Screens
   const MenuScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-8">
       <div className="text-center mb-8">
@@ -508,27 +491,15 @@ export default function PingPongProGame() {
           <Play className="mr-2 h-6 w-6" /> PLAY NOW
         </Button>
 
-        <Button
-          onClick={() => setScreen('heroSelect')}
-          variant="outline"
-          className="h-12 border-orange-400 text-orange-100 hover:bg-orange-800/50"
-        >
+        <Button onClick={() => setScreen('heroSelect')} variant="outline" className="h-12 border-orange-400 text-orange-100 hover:bg-orange-800/50">
           <Users className="mr-2 h-5 w-5" /> Select Player
         </Button>
 
-        <Button
-          onClick={() => setScreen('tableSelect')}
-          variant="outline"
-          className="h-12 border-orange-400 text-orange-100 hover:bg-orange-800/50"
-        >
+        <Button onClick={() => setScreen('tableSelect')} variant="outline" className="h-12 border-orange-400 text-orange-100 hover:bg-orange-800/50">
           <Target className="mr-2 h-5 w-5" /> Select Table
         </Button>
 
-        <Button
-          onClick={() => setScreen('settings')}
-          variant="ghost"
-          className="h-12 text-orange-200 hover:bg-orange-800/30"
-        >
+        <Button onClick={() => setScreen('settings')} variant="ghost" className="h-12 text-orange-200 hover:bg-orange-800/30">
           <Settings className="mr-2 h-5 w-5" /> Settings
         </Button>
       </div>
@@ -536,11 +507,11 @@ export default function PingPongProGame() {
       <div className="mt-8 flex items-center gap-6 text-orange-200">
         <div className="flex items-center gap-2">
           <Trophy className="h-5 w-5 text-yellow-400" />
-          <span>{progress.totalWins} Wins</span>
+          <span>Wins: {progress.totalWins}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-orange-400" />
-          <span>{progress.coins} Coins</span>
+          <Star className="h-5 w-5 text-yellow-400" />
+          <span>{progress.coins} coins</span>
         </div>
       </div>
     </div>
@@ -548,139 +519,95 @@ export default function PingPongProGame() {
 
   const ModeSelectScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-8">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-orange-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-8">SELECT MODE</h2>
+      <h2 className="text-3xl font-bold text-white mb-8">Select Mode</h2>
 
-      <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
+      <div className="grid grid-cols-2 gap-4 w-full max-w-md">
         {[
-          { mode: 'career' as GameMode, icon: '🏆', title: 'Career', desc: 'Climb the rankings' },
-          { mode: 'quickMatch' as GameMode, icon: '⚡', title: 'Quick Match', desc: 'Fast action' },
-          { mode: 'practice' as GameMode, icon: '🎯', title: 'Practice', desc: 'Master your spin' },
-          { mode: 'challenge' as GameMode, icon: '🔥', title: 'Challenge', desc: 'Intense matches' },
-        ].map(({ mode, icon, title, desc }) => (
+          { mode: 'quickMatch' as GameMode, title: 'Quick Match', desc: 'Jump right in!', icon: <Zap className="h-8 w-8" /> },
+          { mode: 'career' as GameMode, title: 'Career', desc: 'Progress through tables', icon: <Trophy className="h-8 w-8" /> },
+          { mode: 'practice' as GameMode, title: 'Practice', desc: 'No pressure', icon: <Target className="h-8 w-8" /> },
+          { mode: 'challenge' as GameMode, title: 'Challenge', desc: 'Test your limits', icon: <Star className="h-8 w-8" /> },
+        ].map(({ mode, title, desc, icon }) => (
           <Card
             key={mode}
             onClick={() => { setGameMode(mode); initGame(); }}
-            className="p-6 bg-gradient-to-br from-orange-800/50 to-red-900/50 border-orange-600/50 hover:border-orange-400 cursor-pointer transition-all hover:scale-105"
+            className="p-6 cursor-pointer bg-white/10 border-white/20 hover:bg-white/20 transition-all text-center"
           >
-            <div className="text-4xl mb-2">{icon}</div>
-            <h3 className="text-lg font-bold text-white">{title}</h3>
-            <p className="text-sm text-orange-300">{desc}</p>
+            <div className="text-orange-300 mb-2 flex justify-center">{icon}</div>
+            <h3 className="text-white font-bold text-lg">{title}</h3>
+            <p className="text-orange-200 text-sm">{desc}</p>
           </Card>
         ))}
       </div>
     </div>
   );
 
-  const HeroSelectScreen = () => {
-    const [gender, setGender] = useState<'male' | 'female'>('male');
-    const heroes = getHeroesByGender(gender);
+  const HeroSelectScreen = () => (
+    <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-6">
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
+      </Button>
 
-    return (
-      <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-6">
-        <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-orange-200">
-          <ChevronLeft className="h-5 w-5" /> Back
-        </Button>
+      <h2 className="text-3xl font-bold text-white mb-6">Choose Your Player</h2>
 
-        <h2 className="text-3xl font-bold text-white mb-4">SELECT PLAYER</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl">
+        {HEROES.map((hero) => {
+          const isUnlocked = progress.unlockedHeroes.includes(hero.id);
+          const isSelected = selectedHero?.id === hero.id;
 
-        <div className="flex gap-2 mb-6">
-          <Button
-            onClick={() => setGender('male')}
-            variant={gender === 'male' ? 'default' : 'outline'}
-            className={gender === 'male' ? 'bg-orange-600' : 'border-orange-500 text-orange-200'}
-          >
-            Male
-          </Button>
-          <Button
-            onClick={() => setGender('female')}
-            variant={gender === 'female' ? 'default' : 'outline'}
-            className={gender === 'female' ? 'bg-orange-600' : 'border-orange-500 text-orange-200'}
-          >
-            Female
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 w-full max-w-2xl overflow-y-auto max-h-[350px]">
-          {heroes.map(hero => {
-            const isUnlocked = progress.unlockedHeroes.includes(hero.id);
-            const isSelected = selectedHero?.id === hero.id;
-
-            return (
-              <Card
-                key={hero.id}
-                onClick={() => {
-                  if (isUnlocked) {
-                    setSelectedHero(hero);
-                    const newProgress = { ...progress, selectedHero: hero.id };
-                    setProgress(newProgress);
-                    storage.saveProgress(newProgress);
-                  } else if (progress.coins >= hero.unlockCost) {
-                    const newProgress = {
-                      ...progress,
-                      coins: progress.coins - hero.unlockCost,
-                      unlockedHeroes: [...progress.unlockedHeroes, hero.id],
-                      selectedHero: hero.id,
-                    };
-                    setProgress(newProgress);
-                    storage.saveProgress(newProgress);
-                    setSelectedHero(hero);
-                  }
-                }}
-                className={`p-4 cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-orange-600 border-orange-400 scale-105'
-                    : isUnlocked
-                    ? 'bg-orange-800/50 border-orange-600/50 hover:border-orange-400'
-                    : 'bg-gray-800/50 border-gray-600/50'
-                }`}
-              >
-                <div className="text-4xl mb-2">{hero.avatar}</div>
-                <h3 className="font-bold text-white text-sm">{hero.name}</h3>
-                {!isUnlocked && (
-                  <div className="flex items-center gap-1 text-yellow-400 text-xs mt-1">
-                    <Lock className="h-3 w-3" />
-                    {hero.unlockCost} coins
-                  </div>
-                )}
-                {isUnlocked && (
-                  <div className="mt-2 space-y-1">
-                    <StatBar label="SPD" value={hero.stats.speed} color="bg-orange-400" />
-                    <StatBar label="PWR" value={hero.stats.power} color="bg-red-400" />
-                    <StatBar label="SPN" value={hero.stats.spin} color="bg-yellow-400" />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+          return (
+            <Card
+              key={hero.id}
+              onClick={() => isUnlocked && setSelectedHero(hero)}
+              className={`p-4 cursor-pointer transition-all ${
+                isSelected ? 'ring-2 ring-yellow-400 bg-white/20' : 'bg-white/10 hover:bg-white/15'
+              } ${!isUnlocked ? 'opacity-50' : ''}`}
+            >
+              <div className="text-4xl text-center mb-2">{hero.avatar}</div>
+              <h3 className="text-white font-bold text-center text-sm">{hero.name}</h3>
+              {!isUnlocked && (
+                <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs mt-1">
+                  <Lock className="h-3 w-3" /> {hero.unlockCost}
+                </div>
+              )}
+              {isUnlocked && (
+                <div className="grid grid-cols-2 gap-1 mt-2 text-xs text-orange-200">
+                  <span>SPD: {hero.stats.speed}</span>
+                  <span>PWR: {hero.stats.power}</span>
+                  <span>TIM: {hero.stats.timing}</span>
+                  <span>SPN: {hero.stats.spin}</span>
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
-    );
-  };
 
-  const StatBar = ({ label, value, color }: { label: string; value: number; color: string }) => (
-    <div className="flex justify-between text-xs text-orange-300">
-      <span>{label}</span>
-      <div className="w-16 bg-orange-900 rounded-full h-1.5">
-        <div className={`${color} h-1.5 rounded-full`} style={{ width: `${value * 10}%` }} />
-      </div>
+      <Button
+        onClick={() => setScreen('menu')}
+        className="mt-6 bg-gradient-to-r from-orange-500 to-red-500"
+        disabled={!selectedHero}
+      >
+        Confirm Selection
+      </Button>
     </div>
   );
 
   const TableSelectScreen = () => (
     <div className="flex flex-col items-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-6">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-orange-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-6">SELECT TABLE</h2>
+      <h2 className="text-3xl font-bold text-white mb-6">Select Table</h2>
 
-      <div className="grid grid-cols-2 gap-4 w-full max-w-xl">
-        {TABLES.map(table => {
-          const isUnlocked = progress.currentLevel >= table.unlockLevel;
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl">
+        {TABLES.map((table) => {
+          const isUnlocked = table.unlockLevel <= progress.currentLevel;
           const isSelected = selectedTable?.id === table.id;
 
           return (
@@ -688,68 +615,57 @@ export default function PingPongProGame() {
               key={table.id}
               onClick={() => isUnlocked && setSelectedTable(table)}
               className={`p-4 cursor-pointer transition-all ${
-                isSelected ? 'border-orange-400 scale-105' : isUnlocked ? 'border-orange-600/50 hover:border-orange-400' : 'border-gray-600/50 opacity-50'
-              }`}
-              style={{
-                background: isUnlocked ? `linear-gradient(135deg, ${table.bgColors[0]}, ${table.bgColors[1]})` : '#1f2937',
-              }}
+                isSelected ? 'ring-2 ring-yellow-400 bg-white/20' : 'bg-white/10 hover:bg-white/15'
+              } ${!isUnlocked ? 'opacity-50' : ''}`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-white">{table.name}</h3>
-                {!isUnlocked && <Lock className="h-4 w-4 text-gray-400" />}
-                {isUnlocked && progress.completedLevels.includes(table.id) && (
-                  <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-                )}
-              </div>
-              <p className="text-xs text-white/70">{table.description}</p>
+              <div 
+                className="h-16 rounded mb-2"
+                style={{ background: `linear-gradient(135deg, ${table.bgColors[0]}, ${table.bgColors[1]})` }}
+              />
+              <h3 className="text-white font-bold text-center text-sm">{table.name}</h3>
+              <p className="text-orange-200 text-xs text-center">{table.type}</p>
+              {!isUnlocked && (
+                <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs mt-1">
+                  <Lock className="h-3 w-3" /> Level {table.unlockLevel}
+                </div>
+              )}
             </Card>
           );
         })}
       </div>
+
+      <Button
+        onClick={() => setScreen('menu')}
+        className="mt-6 bg-gradient-to-r from-orange-500 to-red-500"
+        disabled={!selectedTable}
+      >
+        Confirm Selection
+      </Button>
     </div>
   );
 
   const SettingsScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-8">
-      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-orange-200">
-        <ChevronLeft className="h-5 w-5" /> Back
+      <Button onClick={() => setScreen('menu')} variant="ghost" className="absolute top-4 left-4 text-white">
+        <ChevronLeft className="h-6 w-6" /> Back
       </Button>
 
-      <h2 className="text-3xl font-bold text-white mb-8">SETTINGS</h2>
+      <h2 className="text-3xl font-bold text-white mb-8">Settings</h2>
 
-      <div className="space-y-6 w-full max-w-xs">
-        <div className="flex items-center justify-between p-4 bg-orange-800/30 rounded-lg">
-          <span className="text-white font-medium">Sound</span>
-          <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="ghost" size="icon" className="text-orange-200">
-            {soundEnabled ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
-          </Button>
-        </div>
-
-        <div className="p-4 bg-orange-800/30 rounded-lg">
-          <h3 className="text-white font-medium mb-3">Difficulty</h3>
-          <div className="flex gap-2">
-            {(['easy', 'normal', 'hard'] as const).map(diff => (
-              <Button
-                key={diff}
-                onClick={() => {
-                  const newProgress = { ...progress, difficulty: diff };
-                  setProgress(newProgress);
-                  storage.saveProgress(newProgress);
-                }}
-                variant={progress.difficulty === diff ? 'default' : 'outline'}
-                className={progress.difficulty === diff ? 'bg-orange-600' : 'border-orange-500 text-orange-200'}
-                size="sm"
-              >
-                {diff.charAt(0).toUpperCase() + diff.slice(1)}
-              </Button>
-            ))}
-          </div>
-        </div>
+      <div className="flex flex-col gap-4 w-full max-w-xs">
+        <Button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          variant="outline"
+          className="h-14 border-orange-400 text-orange-100"
+        >
+          {soundEnabled ? <Volume2 className="mr-2 h-5 w-5" /> : <VolumeX className="mr-2 h-5 w-5" />}
+          Sound: {soundEnabled ? 'ON' : 'OFF'}
+        </Button>
 
         <Button
           onClick={() => { storage.clearProgress(); setProgress(storage.loadProgress()); }}
           variant="destructive"
-          className="w-full"
+          className="h-12"
         >
           Reset Progress
         </Button>
@@ -759,30 +675,27 @@ export default function PingPongProGame() {
 
   const MatchEndScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-[500px] bg-gradient-to-br from-orange-900 via-red-800 to-rose-900 rounded-xl p-8">
-      <div className="text-center">
-        <div className="text-6xl mb-4">{matchResult?.won ? '🏆' : '😢'}</div>
-        <h2 className="text-4xl font-black text-white mb-2">{matchResult?.won ? 'VICTORY!' : 'DEFEAT'}</h2>
-        <p className="text-orange-200 text-xl mb-6">{matchResult?.playerScore} - {matchResult?.opponentScore}</p>
+      <h2 className={`text-4xl font-black mb-4 ${matchResult?.won ? 'text-yellow-400' : 'text-red-400'}`}>
+        {matchResult?.won ? '🏆 VICTORY!' : '😔 DEFEAT'}
+      </h2>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-orange-800/30 p-4 rounded-lg">
-            <p className="text-orange-300 text-sm">Rallies</p>
-            <p className="text-2xl font-bold text-white">{matchResult?.rallies}</p>
-          </div>
-          <div className="bg-orange-800/30 p-4 rounded-lg">
-            <p className="text-orange-300 text-sm">Coins Earned</p>
-            <p className="text-2xl font-bold text-yellow-400">+{matchResult?.coinsEarned}</p>
-          </div>
+      <div className="bg-black/30 rounded-xl p-6 mb-6 text-center">
+        <div className="text-3xl font-bold text-white mb-4">
+          {matchResult?.playerScore} - {matchResult?.opponentScore}
         </div>
+        <div className="grid grid-cols-2 gap-4 text-orange-200">
+          <div>Rallies: {matchResult?.rallies}</div>
+          <div>Coins: +{matchResult?.coinsEarned}</div>
+        </div>
+      </div>
 
-        <div className="flex gap-4">
-          <Button onClick={() => setScreen('menu')} variant="outline" className="border-orange-400 text-orange-100">
-            Menu
-          </Button>
-          <Button onClick={initGame} className="bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold">
-            Play Again
-          </Button>
-        </div>
+      <div className="flex gap-4">
+        <Button onClick={initGame} className="bg-gradient-to-r from-orange-500 to-red-500">
+          <Play className="mr-2 h-5 w-5" /> Play Again
+        </Button>
+        <Button onClick={() => setScreen('menu')} variant="outline" className="border-orange-400 text-orange-100">
+          Main Menu
+        </Button>
       </div>
     </div>
   );
@@ -790,15 +703,12 @@ export default function PingPongProGame() {
   const PausedOverlay = () => (
     <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-xl">
       <div className="text-center">
-        <h2 className="text-4xl font-bold text-white mb-6">PAUSED</h2>
-        <div className="flex flex-col gap-3">
-          <Button
-            onClick={() => { setIsPaused(false); if (gameStateRef.current) gameStateRef.current.isPaused = false; }}
-            className="bg-orange-600 hover:bg-orange-500"
-          >
+        <h2 className="text-4xl font-bold text-white mb-8">PAUSED</h2>
+        <div className="flex flex-col gap-4">
+          <Button onClick={() => { setIsPaused(false); if (gameStateRef.current) gameStateRef.current.isPaused = false; }}>
             <Play className="mr-2 h-5 w-5" /> Resume
           </Button>
-          <Button onClick={() => setScreen('menu')} variant="outline" className="border-orange-400 text-orange-100">
+          <Button onClick={() => setScreen('menu')} variant="outline">
             Quit to Menu
           </Button>
         </div>
@@ -814,32 +724,29 @@ export default function PingPongProGame() {
       {screen === 'tableSelect' && <TableSelectScreen />}
       {screen === 'settings' && <SettingsScreen />}
       {screen === 'matchEnd' && <MatchEndScreen />}
-      
+
       {screen === 'playing' && (
         <div className="relative">
-          <div className="flex items-center justify-between mb-2 px-2">
+          <div className="absolute top-2 right-2 z-10 flex gap-2">
             <Button
               onClick={() => { setIsPaused(true); if (gameStateRef.current) gameStateRef.current.isPaused = true; }}
-              variant="ghost" size="icon" className="text-orange-200"
+              size="sm"
+              variant="secondary"
             >
-              <Pause className="h-5 w-5" />
+              <Pause className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-2 text-orange-200">
-              <Zap className="h-4 w-4 text-yellow-400" />
-              <span>{progress.coins}</span>
-            </div>
-            <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="ghost" size="icon" className="text-orange-200">
-              {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+            <Button onClick={() => setSoundEnabled(!soundEnabled)} size="sm" variant="secondary">
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
           </div>
-          
+
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            className="w-full rounded-xl border-2 border-orange-600/50 shadow-2xl cursor-none"
+            className="w-full rounded-xl shadow-2xl cursor-none"
           />
-          
+
           {isPaused && <PausedOverlay />}
         </div>
       )}
