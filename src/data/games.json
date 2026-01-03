@@ -196,27 +196,27 @@
     "gameUrl": "/game/badminton-smash",
     "category": "Sports",
     "featured": true,
-    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "description": "Master the art of smashing! Time your shots perfectly and dominate the court.",
     "isPlayable": true
   },
   {
     "id": "ping-pong-pro",
-    "title": "ping-pong-pro",
+    "title": "Ping Pong Pro",
     "thumbnail": "/images/tennis-hero.png",
     "gameUrl": "/game/ping-pong-pro",
     "category": "Sports",
     "featured": true,
-    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "description": "Table tennis championship awaits! Master spin, speed, and precision.",
     "isPlayable": true
   },
   {
     "id": "pickleball-champion",
-    "title": "pickleball-champion",
+    "title": "Pickleball Champion",
     "thumbnail": "/images/tennis-hero.png",
     "gameUrl": "/game/pickleball-champion",
     "category": "Sports",
     "featured": true,
-    "description": "Become a tennis champion! Master timing, unlock heroes, and conquer courts worldwide.",
+    "description": "Master the kitchen! Perfect your dinks and become a pickleball champion.",
     "isPlayable": true
   }
 ]
