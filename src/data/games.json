@@ -219,4 +219,15 @@
     "description": "Master the kitchen! Perfect your dinks and become a pickleball champion.",
     "isPlayable": true
   }
+  ,
+  {
+    "id": "zombie-survival",
+    "title": "Zombie Apocalypse",
+    "thumbnail": "/images/minesweeper-game.png",
+    "gameUrl": "/game/zombie-survival",
+    "category": "Action",
+    "featured": true,
+    "description": "Survive waves of undead in this top-down shooter. Collect weapons and power-ups!",
+    "isPlayable": true
+  }
 ]
