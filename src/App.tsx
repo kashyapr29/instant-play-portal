@@ -31,6 +31,7 @@ import BadmintonSmashGame from "./games/badminton/BadmintonSmashGame";
 import PingPongProGame from "./games/tabletennis/PingPongProGame";
 import PickleballChampionGame from "./games/pickleball/PickleballChampionGame";
 import ZombieSurvival from "./games/zombie-survival/ZombieSurvival";
+import ShadowNinjaFight from "./games/shadow-ninja/ShadowNinjaFight";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/game/ping-pong-pro" element={<PingPongProGame />} />
             <Route path="/game/pickleball-champion" element={<PickleballChampionGame />} />
             <Route path="/game/zombie-survival" element={<ZombieSurvival />} />
+            <Route path="/game/shadow-ninja-fight" element={<ShadowNinjaFight />} />
             
             {/* Info Pages Info */}
             <Route path="/developers" element={<Developers />} />
