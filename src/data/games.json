@@ -229,5 +229,15 @@
     "featured": true,
     "description": "Survive waves of undead in this top-down shooter. Collect weapons and power-ups!",
     "isPlayable": true
+  },
+  {
+    "id": "shadow-ninja-fight",
+    "title": "Shadow Ninja Fight",
+    "thumbnail": "/images/ninja-jump.png",
+    "gameUrl": "/game/shadow-ninja-fight",
+    "category": "Action",
+    "featured": true,
+    "description": "Epic 1v1 fighting game! Battle through 15 levels, master special abilities, and become the ultimate shadow ninja warrior.",
+    "isPlayable": true
   }
 ]
