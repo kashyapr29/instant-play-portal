@@ -218,8 +218,7 @@
     "featured": true,
     "description": "Master the kitchen! Perfect your dinks and become a pickleball champion.",
     "isPlayable": true
-  }
-  ,
+  },
   {
     "id": "zombie-survival",
     "title": "Zombie Apocalypse",
@@ -228,6 +227,26 @@
     "category": "Action",
     "featured": true,
     "description": "Survive waves of undead in this top-down shooter. Collect weapons and power-ups!",
+    "isPlayable": true
+  },
+  {
+    "id": "tank-commander",
+    "title": "Tank Commander",
+    "thumbnail": "/images/minesweeper-game.png",
+    "gameUrl": "/game/tank-commander",
+    "category": "Action",
+    "featured": true,
+    "description": "Command your armored vehicle through intense battles. Destroy enemy tanks!",
+    "isPlayable": true
+  },
+  {
+    "id": "cyber-combat",
+    "title": "Cyber Combat",
+    "thumbnail": "/images/minesweeper-game.png",
+    "gameUrl": "/game/cyber-combat",
+    "category": "Action",
+    "featured": true,
+    "description": "Battle through waves of cyber enemies in this futuristic neon arena shooter!",
     "isPlayable": true
   },
   {
