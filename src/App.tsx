@@ -35,6 +35,7 @@ import TankCommander from "./games/tank-commander/TankCommander";
 import CyberCombat from "./games/cyber-combat/CyberCombat";
 import ShadowNinjaFight from "./games/shadow-ninja/ShadowNinjaFight";
 import RacingThunderGame from "./games/racing-thunder/RacingThunderGame";
+import FruitNinjaGame from "./games/fruit-ninja/FruitNinjaGame";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ const App = () => (
             <Route path="/game/cyber-combat" element={<CyberCombat />} />
             <Route path="/game/shadow-ninja-fight" element={<ShadowNinjaFight />} />
             <Route path="/game/racing-thunder" element={<RacingThunderGame />} />
+            <Route path="/game/fruit-ninja" element={<FruitNinjaGame />} />
             
             {/* Info Pages Info */}
             <Route path="/developers" element={<Developers />} />

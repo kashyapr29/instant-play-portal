@@ -1,5 +1,15 @@
 [
   {
+    "id": "fruit-ninja",
+    "title": "Fruit Ninja",
+    "thumbnail": "/images/fruit-ninja.png",
+    "gameUrl": "/game/fruit-ninja",
+    "category": "Arcade",
+    "featured": true,
+    "description": "Slice fruits, build combos, and avoid bombs in this addictive ninja slicing game!",
+    "isPlayable": true
+  },
+  {
     "id": "space-shooter",
     "title": "Space Defender",
     "thumbnail": "/images/space-invaders.png",
