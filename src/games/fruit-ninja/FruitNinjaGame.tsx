@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Volume2, VolumeX, Pause, Play, Home, RotateCcw, Trash2 } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, Home, Trash2 } from 'lucide-react';
 import GameLayout from '@/components/GameLayout';
 import {
   Fruit,
@@ -12,7 +12,6 @@ import {
   GameState,
   FruitType,
   FRUIT_COLORS,
-  GRAVITY,
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
 } from './types';
@@ -21,6 +20,9 @@ import { audioManager } from './audio';
 import { Renderer } from './renderer';
 
 const FRUIT_TYPES: FruitType[] = ['apple', 'banana', 'peach', 'strawberry', 'watermelon'];
+
+// Original game constants
+const GRAVITY = 0.1;
 
 const FruitNinjaGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,14 +75,23 @@ const FruitNinjaGame = () => {
     rendererRef.current = new Renderer(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
   }, []);
 
-  // Create random fruit
+  // Create random fruit - following original game logic
   const createFruit = useCallback((): Fruit => {
-    const isBomb = Math.random() < 0.15 + gameStateRef.current.difficulty * 0.02;
+    const isBomb = Math.random() < 0.15;
     const type: FruitType = isBomb ? 'bomb' : FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
-    const x = Math.random() * (CANVAS_WIDTH - 100) + 50;
-    const y = CANVAS_HEIGHT + 50;
-    const xSpeed = (Math.random() - 0.5) * 4;
-    const ySpeed = -(8 + Math.random() * 4 + gameStateRef.current.difficulty * 0.5);
+    const x = Math.random() * CANVAS_WIDTH;
+    const y = CANVAS_HEIGHT;
+    
+    // Original game xSpeed logic: if on right side, go left; if on left side, go right
+    const xSpeed = x > CANVAS_WIDTH / 2 
+      ? -(Math.random() * 2.3 + 0.5) 
+      : (Math.random() * 2.3 + 0.5);
+    
+    // Original game ySpeed
+    const ySpeed = -(Math.random() * 3 + 7.4);
+    
+    // Size with noise variation like original
+    const size = Math.random() * 20 + 40;
 
     return {
       id: fruitIdRef.current++,
@@ -88,12 +99,12 @@ const FruitNinjaGame = () => {
       y,
       xSpeed,
       ySpeed,
-      size: 50 + Math.random() * 20,
+      size,
       type,
       sliced: false,
       visible: true,
       rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.2,
+      rotationSpeed: (Math.random() - 0.5) * 0.15,
     };
   }, []);
 
@@ -127,18 +138,36 @@ const FruitNinjaGame = () => {
     }
   }, []);
 
+  // Check slice collision - following original Sword.checkSlice logic
+  const checkSliceCollision = useCallback((stroke1X: number, stroke1Y: number, stroke2X: number, stroke2Y: number) => {
+    fruitsRef.current.forEach(fruit => {
+      if (fruit.sliced || !fruit.visible) return;
+
+      // Original game slice detection logic
+      const d1 = Math.sqrt((stroke1X - fruit.x) ** 2 + (stroke1Y - fruit.y) ** 2);
+      const d2 = Math.sqrt((stroke2X - fruit.x) ** 2 + (stroke2Y - fruit.y) ** 2);
+      const d3 = Math.sqrt((stroke1X - stroke2X) ** 2 + (stroke1Y - stroke2Y) ** 2);
+      
+      const sliced = (d1 < fruit.size) || ((d1 < d3 && d2 < d3) && (d3 < CANVAS_WIDTH / 4));
+      
+      if (sliced) {
+        sliceFruit(fruit);
+      }
+    });
+  }, []);
+
   // Slice fruit
   const sliceFruit = useCallback((fruit: Fruit) => {
     if (fruit.sliced) return;
 
     fruit.sliced = true;
-    fruit.visible = false;
 
     if (fruit.type === 'bomb') {
-      // Game over on bomb
+      // Game over on bomb - like original
       audioManager.bombExplode();
       rendererRef.current?.shake(20);
       createSliceParticles(fruit.x, fruit.y, '#ff4444');
+      fruit.visible = false;
 
       setGameState(prev => ({ ...prev, lives: 0 }));
       return;
@@ -152,13 +181,13 @@ const FruitNinjaGame = () => {
     const color = FRUIT_COLORS[fruit.type];
     createSliceParticles(fruit.x, fruit.y, color);
 
-    // Create sliced halves
+    // Create sliced halves - like original Fruit.draw when sliced
     slicedHalvesRef.current.push(
       {
-        x: fruit.x - 15,
+        x: fruit.x - 25,
         y: fruit.y,
-        xSpeed: -2 - Math.random() * 2,
-        ySpeed: -2,
+        xSpeed: -fruit.xSpeed,
+        ySpeed: fruit.ySpeed,
         rotation: fruit.rotation,
         rotationSpeed: -0.15,
         type: fruit.type,
@@ -166,10 +195,10 @@ const FruitNinjaGame = () => {
         life: 1,
       },
       {
-        x: fruit.x + 15,
+        x: fruit.x + 25,
         y: fruit.y,
-        xSpeed: 2 + Math.random() * 2,
-        ySpeed: -2,
+        xSpeed: fruit.xSpeed,
+        ySpeed: fruit.ySpeed,
         rotation: fruit.rotation,
         rotationSpeed: 0.15,
         type: fruit.type,
@@ -178,10 +207,13 @@ const FruitNinjaGame = () => {
       }
     );
 
+    // Hide original fruit
+    fruit.visible = false;
+
     // Update score and combo
     const newCombo = gameStateRef.current.combo + 1;
     const comboBonus = Math.floor(newCombo * 10);
-    const basePoints = 10;
+    const basePoints = 1; // Original gives 1 point per fruit
 
     if (newCombo >= 3) {
       audioManager.combo(newCombo);
@@ -190,44 +222,13 @@ const FruitNinjaGame = () => {
 
     setGameState(prev => ({
       ...prev,
-      score: prev.score + basePoints + comboBonus,
+      score: prev.score + basePoints + (newCombo >= 3 ? comboBonus : 0),
       combo: newCombo,
       comboTimer: 60,
     }));
 
     updateBestCombo(newCombo);
   }, [createSliceParticles]);
-
-  // Check if slice trail intersects with fruit
-  const checkSliceCollision = useCallback((mouseX: number, mouseY: number, prevX: number, prevY: number) => {
-    const trail = sliceTrailRef.current;
-    if (trail.length < 2) return;
-
-    fruitsRef.current.forEach(fruit => {
-      if (fruit.sliced || !fruit.visible) return;
-
-      // Check distance from slice line to fruit center
-      const dx = mouseX - prevX;
-      const dy = mouseY - prevY;
-      const fx = fruit.x - prevX;
-      const fy = fruit.y - prevY;
-
-      const lineLength = Math.sqrt(dx * dx + dy * dy);
-      if (lineLength === 0) return;
-
-      const t = Math.max(0, Math.min(1, (fx * dx + fy * dy) / (lineLength * lineLength)));
-      const closestX = prevX + t * dx;
-      const closestY = prevY + t * dy;
-
-      const distToFruit = Math.sqrt(
-        (fruit.x - closestX) ** 2 + (fruit.y - closestY) ** 2
-      );
-
-      if (distToFruit < fruit.size / 2 + 10) {
-        sliceFruit(fruit);
-      }
-    });
-  }, [sliceFruit]);
 
   // Start game
   const startGame = useCallback(() => {
@@ -269,7 +270,7 @@ const FruitNinjaGame = () => {
     setGameState(prev => ({ ...prev, screen: 'gameOver' }));
   }, []);
 
-  // Game loop
+  // Game loop - following original draw() and game() functions
   const gameLoop = useCallback((timestamp: number) => {
     const deltaTime = (timestamp - lastTimeRef.current) / 1000;
     lastTimeRef.current = timestamp;
@@ -291,31 +292,30 @@ const FruitNinjaGame = () => {
     } else if (state.screen === 'playing') {
       frameCountRef.current++;
 
-      // Spawn fruits
-      const spawnRate = Math.max(30, 80 - state.difficulty * 5);
-      if (frameCountRef.current % spawnRate === 0) {
-        const count = 1 + Math.floor(Math.random() * (1 + state.difficulty / 5));
-        for (let i = 0; i < count; i++) {
-          setTimeout(() => {
-            fruitsRef.current.push(createFruit());
-          }, i * 150);
+      // Spawn fruits - similar to original: frameCount % 5 === 0 && noise() > 0.69
+      if (frameCountRef.current % 5 === 0) {
+        if (Math.random() > 0.69) {
+          fruitsRef.current.push(createFruit());
         }
       }
 
-      // Increase difficulty over time
-      if (frameCountRef.current % 600 === 0) {
-        setGameState(prev => ({ ...prev, difficulty: Math.min(10, prev.difficulty + 0.5) }));
-      }
-
-      // Update fruits
+      // Update fruits - like original Fruit.update()
       fruitsRef.current.forEach(fruit => {
-        fruit.x += fruit.xSpeed;
-        fruit.y += fruit.ySpeed;
-        fruit.ySpeed += GRAVITY;
+        if (fruit.sliced && fruit.type !== 'bomb') {
+          // Sliced fruit movement - faster gravity like original
+          fruit.x -= fruit.xSpeed;
+          fruit.y += fruit.ySpeed;
+          fruit.ySpeed += GRAVITY * 5;
+        } else {
+          // Normal fruit movement
+          fruit.x += fruit.xSpeed;
+          fruit.y += fruit.ySpeed;
+          fruit.ySpeed += GRAVITY;
+        }
         fruit.rotation += fruit.rotationSpeed;
 
         // Check if missed (fell below screen without being sliced)
-        if (fruit.y > CANVAS_HEIGHT + 100 && !fruit.sliced && fruit.type !== 'bomb') {
+        if (fruit.y > CANVAS_HEIGHT && !fruit.sliced && fruit.type !== 'bomb') {
           fruit.visible = false;
           audioManager.fruitMissed();
           setGameState(prev => ({ ...prev, lives: prev.lives - 1, combo: 0 }));
@@ -323,15 +323,15 @@ const FruitNinjaGame = () => {
       });
 
       // Remove off-screen fruits
-      fruitsRef.current = fruitsRef.current.filter(f => f.visible && f.y < CANVAS_HEIGHT + 150);
+      fruitsRef.current = fruitsRef.current.filter(f => f.visible && f.y < CANVAS_HEIGHT + 100);
 
-      // Update sliced halves
+      // Update sliced halves - like original sliced fruit physics
       slicedHalvesRef.current.forEach(half => {
         half.x += half.xSpeed;
         half.y += half.ySpeed;
-        half.ySpeed += GRAVITY;
+        half.ySpeed += GRAVITY * 5;
         half.rotation += half.rotationSpeed;
-        half.life -= 0.015;
+        half.life -= 0.012;
       });
       slicedHalvesRef.current = slicedHalvesRef.current.filter(h => h.life > 0 && h.y < CANVAS_HEIGHT + 100);
 
@@ -339,7 +339,7 @@ const FruitNinjaGame = () => {
       particlesRef.current.forEach(p => {
         p.x += p.dx;
         p.y += p.dy;
-        p.dy += GRAVITY * 0.5;
+        p.dy += GRAVITY * 2;
         p.life -= 0.03;
       });
       particlesRef.current = particlesRef.current.filter(p => p.life > 0);
@@ -350,11 +350,14 @@ const FruitNinjaGame = () => {
       });
       juiceSplashesRef.current = juiceSplashesRef.current.filter(s => s.life > 0);
 
-      // Update slice trail
-      sliceTrailRef.current.forEach(t => {
-        t.age++;
-      });
-      sliceTrailRef.current = sliceTrailRef.current.filter(t => t.age < 20);
+      // Update slice trail - like original Sword.update()
+      if (sliceTrailRef.current.length > 20) {
+        sliceTrailRef.current.splice(0, 2);
+      }
+      if (sliceTrailRef.current.length > 0) {
+        sliceTrailRef.current.forEach(t => t.age++);
+        sliceTrailRef.current = sliceTrailRef.current.filter(t => t.age < 20);
+      }
 
       // Update combo timer
       if (state.comboTimer > 0) {
@@ -450,9 +453,9 @@ const FruitNinjaGame = () => {
     const coords = getCanvasCoords(e);
 
     if (gameState.screen === 'menu') {
-      // Check play button
+      // Check play button area (new-game button position)
       if (coords.x > CANVAS_WIDTH / 2 - 100 && coords.x < CANVAS_WIDTH / 2 + 100 &&
-          coords.y > 280 && coords.y < 340) {
+          coords.y > 320 && coords.y < 520) {
         audioManager.menuClick();
         startGame();
         return;
@@ -504,12 +507,17 @@ const FruitNinjaGame = () => {
     const coords = getCanvasCoords(e);
     const prevCoords = lastMousePosRef.current;
 
+    // Add to swipe trail - like original Sword.swipe()
     sliceTrailRef.current.push({ x: coords.x, y: coords.y, age: 0 });
-    if (sliceTrailRef.current.length > 20) {
-      sliceTrailRef.current.shift();
+
+    // Check slice collision with latest two strokes - like original Sword.checkSlice()
+    if (sliceTrailRef.current.length >= 2) {
+      const len = sliceTrailRef.current.length;
+      const stroke1 = sliceTrailRef.current[len - 1];
+      const stroke2 = sliceTrailRef.current[len - 2];
+      checkSliceCollision(stroke1.x, stroke1.y, stroke2.x, stroke2.y);
     }
 
-    checkSliceCollision(coords.x, coords.y, prevCoords.x, prevCoords.y);
     lastMousePosRef.current = coords;
   }, [gameState.screen, getCanvasCoords, checkSliceCollision]);
 
@@ -629,7 +637,6 @@ const FruitNinjaGame = () => {
             height={CANVAS_HEIGHT}
             className="rounded-2xl shadow-2xl cursor-crosshair max-w-full"
             style={{
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)',
               touchAction: 'none',
             }}
             onMouseDown={handlePointerDown}

@@ -1,4 +1,4 @@
-// Fruit Ninja Renderer
+// Fruit Ninja Renderer - Uses original game assets
 
 import {
   Fruit,
@@ -6,10 +6,11 @@ import {
   Particle,
   SlicedFruitHalf,
   JuiceSplash,
-  FRUIT_COLORS,
-  FRUIT_INNER_COLORS,
   FruitType,
 } from './types';
+
+// Asset paths
+const ASSET_BASE = '/src/games/fruit-ninja/assets/game_assets';
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -18,10 +19,57 @@ export class Renderer {
   private shakeAmount = 0;
   private shakeDecay = 0.9;
 
+  // Loaded images
+  private images: Map<string, HTMLImageElement> = new Map();
+  private imagesLoaded = false;
+
   constructor(ctx: CanvasRenderingContext2D, width: number, height: number) {
     this.ctx = ctx;
     this.width = width;
     this.height = height;
+    this.loadImages();
+  }
+
+  private loadImages() {
+    const imageList = [
+      // Fruits
+      'apple', 'apple-1', 'apple-2',
+      'banana', 'banana-1', 'banana-2',
+      'peach', 'peach-1', 'peach-2',
+      'strawberry', 'strawberry-1', 'strawberry-2',
+      'watermelon', 'watermelon-1', 'watermelon-2',
+      'boom',
+      // UI
+      'background',
+      'home-mask',
+      'fruit',
+      'ninja',
+      'new-game',
+      'fruitMode',
+      'game-over',
+      'score',
+      // Lives
+      'x1', 'x2', 'x3',
+      'xx1', 'xx2', 'xx3',
+    ];
+
+    let loadedCount = 0;
+    imageList.forEach(name => {
+      const img = new Image();
+      const ext = name === 'background' ? '.jpg' : '.png';
+      img.src = `${ASSET_BASE}/${name}${ext}`;
+      img.onload = () => {
+        loadedCount++;
+        if (loadedCount === imageList.length) {
+          this.imagesLoaded = true;
+        }
+      };
+      this.images.set(name, img);
+    });
+  }
+
+  private getImage(name: string): HTMLImageElement | null {
+    return this.images.get(name) || null;
   }
 
   shake(amount: number) {
@@ -43,22 +91,18 @@ export class Renderer {
       ctx.translate(shakeX, shakeY);
     }
 
-    // Gradient background - traditional dojo style
-    const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
-    gradient.addColorStop(0, '#1a1a2e');
-    gradient.addColorStop(0.5, '#16213e');
-    gradient.addColorStop(1, '#0f0f23');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    // Wood texture lines
-    ctx.strokeStyle = 'rgba(139, 90, 43, 0.1)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < this.height; i += 20) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(this.width, i + (Math.sin(i * 0.1) * 5));
-      ctx.stroke();
+    // Draw original background
+    const bg = this.getImage('background');
+    if (bg && bg.complete) {
+      ctx.drawImage(bg, 0, 0, this.width, this.height);
+    } else {
+      // Fallback gradient
+      const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
+      gradient.addColorStop(0, '#1a1a2e');
+      gradient.addColorStop(0.5, '#16213e');
+      gradient.addColorStop(1, '#0f0f23');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, this.width, this.height);
     }
 
     ctx.restore();
@@ -72,109 +116,15 @@ export class Renderer {
     ctx.translate(x, y);
     ctx.rotate(rotation);
 
-    const color = FRUIT_COLORS[type];
-    const innerColor = FRUIT_INNER_COLORS[type];
-
-    if (type === 'bomb') {
-      // Draw bomb
-      ctx.beginPath();
-      ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#2c3e50';
-      ctx.fill();
-
-      // Bomb highlight
-      ctx.beginPath();
-      ctx.arc(-size / 6, -size / 6, size / 4, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fill();
-
-      // Fuse
-      ctx.beginPath();
-      ctx.moveTo(0, -size / 2);
-      ctx.quadraticCurveTo(size / 4, -size / 2 - 10, size / 3, -size / 2 - 15);
-      ctx.strokeStyle = '#8b4513';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Spark
-      ctx.beginPath();
-      ctx.arc(size / 3, -size / 2 - 15, 4 + Math.random() * 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff6b35';
-      ctx.fill();
-
-      // Skull icon
-      ctx.fillStyle = '#e74c3c';
-      ctx.font = `${size / 2}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('☠', 0, 0);
+    const img = this.getImage(type);
+    if (img && img.complete) {
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
     } else {
-      // Outer glow
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
-
-      // Main fruit body
+      // Fallback circle
       ctx.beginPath();
       ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.fillStyle = type === 'bomb' ? '#2c3e50' : '#e74c3c';
       ctx.fill();
-
-      // Inner highlight
-      ctx.beginPath();
-      ctx.arc(-size / 6, -size / 6, size / 3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.fill();
-
-      // Leaf/stem for some fruits
-      if (type === 'apple' || type === 'peach') {
-        ctx.beginPath();
-        ctx.moveTo(0, -size / 2);
-        ctx.quadraticCurveTo(5, -size / 2 - 8, 2, -size / 2 - 12);
-        ctx.strokeStyle = '#2d5016';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Leaf
-        ctx.beginPath();
-        ctx.ellipse(8, -size / 2 - 5, 8, 5, Math.PI / 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#27ae60';
-        ctx.fill();
-      }
-
-      // Banana curves
-      if (type === 'banana') {
-        ctx.beginPath();
-        ctx.moveTo(-size / 2, 0);
-        ctx.quadraticCurveTo(0, -size / 3, size / 2, 0);
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      // Strawberry seeds
-      if (type === 'strawberry') {
-        ctx.fillStyle = '#f1c40f';
-        for (let i = 0; i < 8; i++) {
-          const angle = (i / 8) * Math.PI * 2;
-          const seedX = Math.cos(angle) * size / 4;
-          const seedY = Math.sin(angle) * size / 4;
-          ctx.beginPath();
-          ctx.ellipse(seedX, seedY, 2, 3, angle, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Watermelon stripes
-      if (type === 'watermelon') {
-        ctx.strokeStyle = '#1e8449';
-        ctx.lineWidth = 3;
-        for (let i = -2; i <= 2; i++) {
-          ctx.beginPath();
-          ctx.moveTo(i * 8, -size / 2);
-          ctx.lineTo(i * 8, size / 2);
-          ctx.stroke();
-        }
-      }
     }
 
     ctx.restore();
@@ -182,47 +132,29 @@ export class Renderer {
 
   drawSlicedHalf(half: SlicedFruitHalf) {
     const ctx = this.ctx;
-    const { x, y, rotation, type, isLeft } = half;
-    const size = 40;
+    const { x, y, rotation, type, isLeft, life } = half;
+    const size = 50;
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rotation);
+    ctx.globalAlpha = life;
 
-    const color = FRUIT_COLORS[type];
-    const innerColor = FRUIT_INNER_COLORS[type];
-
-    // Draw half circle
-    ctx.beginPath();
-    if (isLeft) {
-      ctx.arc(0, 0, size / 2, Math.PI / 2, -Math.PI / 2);
+    const imgName = `${type}-${isLeft ? '1' : '2'}`;
+    const img = this.getImage(imgName);
+    if (img && img.complete) {
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
     } else {
-      ctx.arc(0, 0, size / 2, -Math.PI / 2, Math.PI / 2);
-    }
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // Inner flesh
-    ctx.beginPath();
-    if (isLeft) {
-      ctx.arc(2, 0, size / 2.5, Math.PI / 2, -Math.PI / 2);
-    } else {
-      ctx.arc(-2, 0, size / 2.5, -Math.PI / 2, Math.PI / 2);
-    }
-    ctx.closePath();
-    ctx.fillStyle = innerColor;
-    ctx.fill();
-
-    // Seeds for watermelon
-    if (type === 'watermelon') {
-      ctx.fillStyle = '#1a1a2e';
-      for (let i = 0; i < 3; i++) {
-        const seedY = (i - 1) * 8;
-        ctx.beginPath();
-        ctx.ellipse(isLeft ? 5 : -5, seedY, 2, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
+      // Fallback half circle
+      ctx.beginPath();
+      if (isLeft) {
+        ctx.arc(0, 0, size / 2, Math.PI / 2, -Math.PI / 2);
+      } else {
+        ctx.arc(0, 0, size / 2, -Math.PI / 2, Math.PI / 2);
       }
+      ctx.closePath();
+      ctx.fillStyle = '#e74c3c';
+      ctx.fill();
     }
 
     ctx.restore();
@@ -240,11 +172,11 @@ export class Renderer {
       const prev = trail[i - 1];
       const curr = trail[i];
       const alpha = 1 - curr.age / 20;
-      const width = (1 - i / trail.length) * 12 + 2;
+      const width = (1 - i / trail.length) * 15 + 3;
 
       if (alpha <= 0) continue;
 
-      // Blade glow
+      // White blade glow (like original game sword)
       ctx.beginPath();
       ctx.moveTo(prev.x, prev.y);
       ctx.lineTo(curr.x, curr.y);
@@ -256,7 +188,7 @@ export class Renderer {
       ctx.beginPath();
       ctx.moveTo(prev.x, prev.y);
       ctx.lineTo(curr.x, curr.y);
-      ctx.strokeStyle = `rgba(200, 230, 255, ${alpha * 0.8})`;
+      ctx.strokeStyle = `rgba(230, 245, 255, ${alpha * 0.9})`;
       ctx.lineWidth = width * 0.5;
       ctx.stroke();
     }
@@ -282,7 +214,7 @@ export class Renderer {
     const alpha = splash.life;
 
     ctx.save();
-    ctx.globalAlpha = alpha * 0.6;
+    ctx.globalAlpha = alpha * 0.7;
     ctx.fillStyle = splash.color;
     ctx.beginPath();
     ctx.arc(splash.x, splash.y, splash.size, 0, Math.PI * 2);
@@ -293,27 +225,27 @@ export class Renderer {
   drawScore(score: number, highScore: number) {
     const ctx = this.ctx;
 
-    // Score panel
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.roundRect(15, 15, 150, 50, 10);
-    ctx.fill();
 
-    // Score icon (fruit)
-    ctx.fillStyle = '#f39c12';
-    ctx.font = '24px Arial';
-    ctx.fillText('🍊', 25, 48);
+    // Use original score image
+    const scoreImg = this.getImage('score');
+    if (scoreImg && scoreImg.complete) {
+      ctx.drawImage(scoreImg, 10, 10, 40, 40);
+    }
 
-    // Score text
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px Arial';
+    // Score text (orange like original)
     ctx.textAlign = 'left';
-    ctx.fillText(score.toString(), 60, 50);
+    ctx.fillStyle = '#ff9315';
+    ctx.font = 'bold 50px Arial';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 5;
+    ctx.fillText(score.toString(), 55, 50);
 
     // High score
-    ctx.fillStyle = '#aaa';
-    ctx.font = '12px Arial';
-    ctx.fillText(`Best: ${highScore}`, 25, 28);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = '14px Arial';
+    ctx.fillText(`Best: ${highScore}`, 55, 70);
 
     ctx.restore();
   }
@@ -322,14 +254,32 @@ export class Renderer {
     const ctx = this.ctx;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.roundRect(this.width - 130, 15, 115, 40, 10);
-    ctx.fill();
 
-    for (let i = 0; i < 3; i++) {
-      ctx.font = '24px Arial';
-      ctx.fillStyle = i < lives ? '#e74c3c' : 'rgba(255, 255, 255, 0.2)';
-      ctx.fillText('❌', this.width - 120 + i * 35, 44);
+    // Draw X markers like original game
+    const x1 = this.getImage('x1');
+    const x2 = this.getImage('x2');
+    const x3 = this.getImage('x3');
+    const xx1 = this.getImage('xx1');
+    const xx2 = this.getImage('xx2');
+    const xx3 = this.getImage('xx3');
+
+    const baseX = this.width - 110;
+    const y = 20;
+
+    // Draw base X markers
+    if (x1 && x1.complete) ctx.drawImage(x1, baseX, y, 30, 30);
+    if (x2 && x2.complete) ctx.drawImage(x2, baseX + 28, y, 30, 30);
+    if (x3 && x3.complete) ctx.drawImage(x3, baseX + 56, y, 30, 30);
+
+    // Draw lost lives (red X)
+    if (lives <= 2 && xx1 && xx1.complete) {
+      ctx.drawImage(xx1, baseX, y, 30, 30);
+    }
+    if (lives <= 1 && xx2 && xx2.complete) {
+      ctx.drawImage(xx2, baseX + 28, y, 30, 30);
+    }
+    if (lives === 0 && xx3 && xx3.complete) {
+      ctx.drawImage(xx3, baseX + 56, y, 30, 30);
     }
 
     ctx.restore();
@@ -354,6 +304,8 @@ export class Renderer {
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#c0392b';
     ctx.lineWidth = 3;
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 10;
     ctx.strokeText(`${combo}x COMBO!`, 0, 0);
     ctx.fillText(`${combo}x COMBO!`, 0, 0);
 
@@ -361,6 +313,7 @@ export class Renderer {
     const bonus = combo * 10;
     ctx.fillStyle = '#27ae60';
     ctx.font = 'bold 20px Arial';
+    ctx.shadowBlur = 5;
     ctx.fillText(`+${bonus}`, 0, 30);
 
     ctx.restore();
@@ -369,73 +322,53 @@ export class Renderer {
   drawMenu(highScore: number, stats: { totalFruitsSliced: number; totalGamesPlayed: number; bestCombo: number }) {
     const ctx = this.ctx;
 
-    // Title
     ctx.save();
 
-    // Decorative elements
-    ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
-    ctx.beginPath();
-    ctx.arc(this.width / 2, 150, 200, 0, Math.PI * 2);
-    ctx.fill();
+    // Draw home mask overlay
+    const homeMask = this.getImage('home-mask');
+    if (homeMask && homeMask.complete) {
+      ctx.drawImage(homeMask, 0, 0, this.width, this.height * 0.55);
+    }
 
-    // Title text with shadow
-    ctx.shadowColor = '#e74c3c';
-    ctx.shadowBlur = 30;
-    ctx.fillStyle = '#e74c3c';
-    ctx.font = 'bold 72px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('FRUIT', this.width / 2, 120);
+    // Draw FRUIT logo
+    const fruitLogo = this.getImage('fruit');
+    if (fruitLogo && fruitLogo.complete) {
+      ctx.drawImage(fruitLogo, this.width / 2 - 180, 20, 358, 195);
+    }
 
-    ctx.fillStyle = '#f39c12';
-    ctx.fillText('NINJA', this.width / 2, 190);
+    // Draw NINJA logo
+    const ninjaLogo = this.getImage('ninja');
+    if (ninjaLogo && ninjaLogo.complete) {
+      ctx.drawImage(ninjaLogo, this.width / 2 - 160, 140, 318, 165);
+    }
 
-    ctx.shadowBlur = 0;
+    // Draw new game button
+    const newGameImg = this.getImage('new-game');
+    if (newGameImg && newGameImg.complete) {
+      ctx.drawImage(newGameImg, this.width / 2 - 100, 320, 200, 200);
+    }
 
-    // Decorative fruits
-    const fruits = ['🍎', '🍌', '🍑', '🍓', '🍉'];
-    fruits.forEach((fruit, i) => {
-      const angle = (i / fruits.length) * Math.PI * 2 - Math.PI / 2;
-      const radius = 130;
-      const fx = this.width / 2 + Math.cos(angle) * radius;
-      const fy = 150 + Math.sin(angle) * radius;
-      ctx.font = '40px Arial';
-      ctx.fillText(fruit, fx, fy);
-    });
-
-    // Play button
-    ctx.fillStyle = '#27ae60';
-    ctx.shadowColor = '#27ae60';
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 100, 280, 200, 60, 30);
-    ctx.fill();
-
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px Arial';
-    ctx.fillText('▶ PLAY', this.width / 2, 318);
+    // Draw fruit mode icon on button
+    const fruitModeImg = this.getImage('fruitMode');
+    if (fruitModeImg && fruitModeImg.complete) {
+      ctx.drawImage(fruitModeImg, this.width / 2 - 45, 375, 90, 90);
+    }
 
     // Stats panel
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 150, 380, 300, 150, 15);
+    (ctx as any).roundRect?.(this.width / 2 - 150, 530, 300, 60, 15) || 
+      ctx.rect(this.width / 2 - 150, 530, 300, 60);
     ctx.fill();
 
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = 'bold 20px Arial';
-    ctx.fillText('🏆 STATISTICS', this.width / 2, 410);
+    ctx.fillStyle = '#ff9315';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏆 STATISTICS', this.width / 2, 550);
 
     ctx.fillStyle = '#fff';
-    ctx.font = '18px Arial';
-    ctx.fillText(`High Score: ${highScore}`, this.width / 2, 445);
-    ctx.fillText(`Fruits Sliced: ${stats.totalFruitsSliced}`, this.width / 2, 475);
-    ctx.fillText(`Games Played: ${stats.totalGamesPlayed}`, this.width / 2, 505);
-    ctx.fillText(`Best Combo: ${stats.bestCombo}x`, this.width / 2, 535);
-
-    // Instructions
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.font = '14px Arial';
-    ctx.fillText('Swipe to slice fruits! Avoid bombs!', this.width / 2, this.height - 30);
+    ctx.fillText(`High Score: ${highScore} | Fruits: ${stats.totalFruitsSliced} | Best Combo: ${stats.bestCombo}x`, this.width / 2, 575);
 
     ctx.restore();
   }
@@ -445,30 +378,37 @@ export class Renderer {
 
     ctx.save();
 
-    // Overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Game Over text
-    ctx.fillStyle = '#e74c3c';
-    ctx.font = 'bold 64px Arial';
-    ctx.textAlign = 'center';
-    ctx.shadowColor = '#e74c3c';
-    ctx.shadowBlur = 30;
-    ctx.fillText('GAME OVER', this.width / 2, 180);
+    // Draw game over image
+    const gameOverImg = this.getImage('game-over');
+    if (gameOverImg && gameOverImg.complete) {
+      ctx.drawImage(gameOverImg, this.width / 2 - 245, 120, 490, 85);
+    } else {
+      // Fallback text
+      ctx.fillStyle = '#e74c3c';
+      ctx.font = 'bold 64px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', this.width / 2, 170);
+    }
 
-    ctx.shadowBlur = 0;
-
-    // Score
+    // Score label
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 30px Arial';
+    ctx.textAlign = 'center';
     ctx.fillText('SCORE', this.width / 2, 260);
 
-    ctx.fillStyle = '#f1c40f';
+    // Score value (orange like original)
+    ctx.fillStyle = '#ff9315';
     ctx.font = 'bold 72px Arial';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 10;
     ctx.fillText(score.toString(), this.width / 2, 330);
 
     // New high score badge
+    ctx.shadowBlur = 0;
     if (isNewHighScore) {
       ctx.fillStyle = '#27ae60';
       ctx.font = 'bold 24px Arial';
@@ -484,7 +424,8 @@ export class Renderer {
     ctx.shadowColor = '#27ae60';
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 100, 430, 200, 55, 27);
+    (ctx as any).roundRect?.(this.width / 2 - 100, 430, 200, 55, 27) ||
+      ctx.rect(this.width / 2 - 100, 430, 200, 55);
     ctx.fill();
 
     ctx.shadowBlur = 0;
@@ -494,13 +435,11 @@ export class Renderer {
 
     // Menu button
     ctx.fillStyle = '#3498db';
-    ctx.shadowColor = '#3498db';
-    ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 80, 510, 160, 45, 22);
+    (ctx as any).roundRect?.(this.width / 2 - 80, 510, 160, 45, 22) ||
+      ctx.rect(this.width / 2 - 80, 510, 160, 45);
     ctx.fill();
 
-    ctx.shadowBlur = 0;
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 20px Arial';
     ctx.fillText('MENU', this.width / 2, 540);
@@ -521,26 +460,31 @@ export class Renderer {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PAUSED', this.width / 2, this.height / 2 - 50);
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 10;
+    ctx.fillText('PAUSED', this.width / 2, this.height / 2 - 60);
 
     // Resume button
     ctx.fillStyle = '#27ae60';
     ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 80, this.height / 2, 160, 50, 25);
+    (ctx as any).roundRect?.(this.width / 2 - 80, this.height / 2, 160, 50, 25) ||
+      ctx.rect(this.width / 2 - 80, this.height / 2, 160, 50);
     ctx.fill();
 
+    ctx.shadowBlur = 0;
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px Arial';
-    ctx.fillText('RESUME', this.width / 2, this.height / 2 + 33);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('RESUME', this.width / 2, this.height / 2 + 32);
 
-    // Menu button
+    // Quit button
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
-    ctx.roundRect(this.width / 2 - 80, this.height / 2 + 70, 160, 50, 25);
+    (ctx as any).roundRect?.(this.width / 2 - 80, this.height / 2 + 70, 160, 50, 25) ||
+      ctx.rect(this.width / 2 - 80, this.height / 2 + 70, 160, 50);
     ctx.fill();
 
     ctx.fillStyle = '#fff';
-    ctx.fillText('QUIT', this.width / 2, this.height / 2 + 103);
+    ctx.fillText('QUIT', this.width / 2, this.height / 2 + 102);
 
     ctx.restore();
   }
