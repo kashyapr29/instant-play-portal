@@ -113,11 +113,11 @@
     "id": "racing-thunder",
     "title": "Racing Thunder",
     "thumbnail": "/images/racing-thunder.png",
-    "gameUrl": "https://html5.gamedistribution.com/rvvASMiM/racing-thunder/index.html",
+    "gameUrl": "/game/racing-thunder",
     "category": "Racing",
-    "featured": false,
-    "description": "High-speed racing action on thrilling tracks around the world.",
-    "isPlayable": false
+    "featured": true,
+    "description": "High-speed arcade racing with 10 vehicles, 8 tracks, power-ups, and challenges. Unlock cars and bikes, upgrade stats, and dominate the leaderboards!",
+    "isPlayable": true
   },
   {
     "id": "chess-master",
